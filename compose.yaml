@@ -1,10 +1,14 @@
 services:
   models:
-    build: .
+    build:
+      context: .
+      network: host
     command: ["models", "--directory", "/models", "--quality", "${OPENSPLINE_DOWNLOAD_QUALITY:-low}"]
     volumes: ["models:/models"]
   openspline:
-    build: .
+    build:
+      context: .
+      network: host
     depends_on:
       models:
         condition: service_completed_successfully

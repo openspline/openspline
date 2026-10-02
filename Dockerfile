@@ -13,7 +13,9 @@ RUN npm run build
 
 FROM pytorch/pytorch:2.7.1-cuda12.8-cudnn9-runtime
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
+RUN apt-get -o Acquire::Retries=5 update \
+    && apt-get install -y --no-install-recommends ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 COPY packages/server /app/packages/server
 COPY --from=frontend /build/packages/server/src/openspline_server/static/browser /app/packages/server/src/openspline_server/static/browser
 COPY requirements/server.txt /app/requirements.txt
