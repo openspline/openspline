@@ -17,7 +17,7 @@ jobs:
           cache: npm
       - run: uv sync --all-packages --frozen
       - run: npm ci && npm run build && npm run check && npm test
-      - run: sh -n install.sh
+      - run: sh -n install.sh && sh -n run.sh
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv run pytest
       - run: node --check packages/server/src/openspline_server/static/demo.js

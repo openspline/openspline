@@ -21,7 +21,7 @@
   - [License](#license)
 ## Quick start
 
-On a Linux GPU machine with Docker and NVIDIA Container Toolkit:
+On a Linux x86_64 server with an NVIDIA GPU and working NVIDIA driver:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | sh
@@ -29,6 +29,8 @@ pip install openspline
 # or, for Node.js
 npm install @openspline/node
 ```
+
+The installer creates a private Python environment, downloads models, and runs the service in your terminal. It defaults to GPU 0; select another with `curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh`. No sudo is needed. Press Ctrl-C to stop; restart with `sh ~/.local/share/openspline/run.sh`.
 
 Python usage:
 
@@ -81,7 +83,7 @@ await avatar.start(agent_session, room=ctx.room)
 await agent_session.start(room=ctx.room, agent=agent)
 ```
 
-[Run the example](examples/python/livekit_agent.py): `PORTRAIT=portrait.jpg python examples/python/livekit_agent.py dev`. Set `OPENAI_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. The Compose service includes LiveKit support.
+[Run the example](examples/python/livekit_agent.py): `PORTRAIT=portrait.jpg python examples/python/livekit_agent.py dev`. Set `OPENAI_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. The native service includes LiveKit support.
 
 ### Gemini Realtime
 
@@ -173,7 +175,7 @@ Install the component you need with `npm install @openspline/react` or `npm inst
 
 ## GPU workers
 
-Edit [workers.yaml](workers.yaml). Each worker loads weights once and serves one session at a time; device assignments cannot overlap.
+Edit `~/.local/share/openspline/workers.yaml` ([example](workers.yaml)). Each worker loads weights once and serves one session at a time; device assignments cannot overlap.
 
 ```yaml
 workers:
@@ -181,16 +183,16 @@ workers:
   - { id: low-1, quality: low, devices: [1] }
 ```
 
-For high quality, set a worker's quality to `high` and `OPENSPLINE_DOWNLOAD_QUALITY=all` before Compose startup. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. A high-quality worker can reserve multiple GPUs with the server's `distributed` extra. IDs are relative to `CUDA_VISIBLE_DEVICES` when set.
+For high quality, set a worker's quality to `high`, then run `sh ~/.local/share/openspline/run.sh --prepare` to download its model before starting. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. A high-quality worker can reserve multiple GPUs with the server's `distributed` extra. IDs are relative to `CUDA_VISIBLE_DEVICES` when set. For multiple workers, remove `OPENSPLINE_GPU` and `OPENSPLINE_QUALITY` overrides from the installed `.env` and configure devices in `workers.yaml`.
 
-For remote playback, set `OPENSPLINE_PUBLIC_URL`, use HTTPS and reachable WebRTC UDP ports, and configure `ice_servers` for TURN when needed. Compose uses Linux host networking. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
+Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, and provider credentials in the installed `.env`. For remote playback, set `OPENSPLINE_PUBLIC_URL`, use HTTPS and reachable WebRTC UDP ports, and configure `ice_servers` for TURN when needed. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
 
 <details>
 <summary>Development and validation</summary>
 
-Run `uv sync --all-packages`, `npm ci && npm run build`, then `uv run pytest && npm test`. `uv run openspline serve --backend test --dev` starts a static-portrait development service without a GPU. Keep optional framework environments separate; from `examples/python`, use `uv pip sync requirements.lock` in an activated environment. Release workflows build and optionally publish packages and containers.
+Run `uv sync --all-packages`, `npm ci && npm run build`, then `uv run pytest && npm test`. `uv run openspline serve --backend test --dev` starts a static-portrait development service without a GPU. Keep optional framework environments separate; from `examples/python`, use `uv pip sync requirements.lock` in an activated environment. Release workflows build and optionally publish Python and npm packages.
 
-Real low/high inference, GPU streaming, browser/React playback, and native LiveKit have been exercised. Short A100 tests measured about 64 FPS for low quality and 8 FPS for high quality under different load conditions; these are engine rates, not playback latency. Long-duration, multi-GPU, cloud-provider, TEN runtime, and Docker deployment validation remain incomplete.
+Real low/high inference, GPU streaming, browser/React playback, and native LiveKit have been exercised. Short A100 tests measured about 64 FPS for low quality and 8 FPS for high quality under different load conditions; these are engine rates, not playback latency. Long-duration, multi-GPU, cloud-provider, and TEN runtime validation remain incomplete.
 
 </details>
 
