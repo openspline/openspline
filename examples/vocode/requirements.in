@@ -1,0 +1,2 @@
+-e ../../packages/python
+vocode @ git+https://github.com/vocodedev/vocode-core.git@e054c33a72787b6a4920f91eb8598ad0bafb4240

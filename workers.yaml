@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=./config.schema.json#/$defs/server
+workers:
+  - id: gpu-0
+    quality: low
+    devices: [0]

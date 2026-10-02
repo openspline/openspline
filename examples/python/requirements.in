@@ -1,0 +1,7 @@
+-e ../../packages/python[media]
+openai-agents==0.20.0
+google-genai==1.75.0
+google-adk==1.35.2
+livekit-agents[openai]==1.8.3
+pipecat-ai[openai,silero,webrtc]==0.0.108
+transformers==4.57.3

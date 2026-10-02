@@ -1,0 +1,13 @@
+.git
+.venv
+.venvs
+.cache
+.tools
+node_modules
+**/node_modules
+**/__pycache__
+/models
+/runtime
+artifacts
+.env
+.env.*

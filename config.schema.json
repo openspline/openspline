@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Openspline configuration",
+  "$ref": "#/$defs/python",
+  "$defs": {
+    "python": {
+      "title": "Python client configuration",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://[^/@?#\\s]+(?:/[^?#\\s]*)?$",
+          "default": "http://localhost:7860",
+          "description": "HTTP(S) service URL. No embedded credentials, query, or fragment. OPENSPLINE_URL is used when omitted."
+        },
+        "api_key": {
+          "type": "string",
+          "default": "",
+          "writeOnly": true,
+          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
+        },
+        "quality": {
+          "type": "string",
+          "enum": [
+            "low",
+            "high"
+          ],
+          "default": "low"
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 180,
+          "description": "Timeout in seconds."
+        },
+        "viewer_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 60,
+          "description": "Timeout in seconds."
+        }
+      }
+    },
+    "node": {
+      "title": "Node client configuration",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://[^/@?#\\s]+(?:/[^?#\\s]*)?$",
+          "default": "http://localhost:7860",
+          "description": "HTTP(S) service URL. No embedded credentials, query, or fragment. OPENSPLINE_URL is used when omitted."
+        },
+        "apiKey": {
+          "type": "string",
+          "default": "",
+          "writeOnly": true,
+          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
+        },
+        "quality": {
+          "type": "string",
+          "enum": [
+            "low",
+            "high"
+          ],
+          "default": "low"
+        },
+        "timeout": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 180000,
+          "description": "Timeout in milliseconds.",
+          "maximum": 2147483647
+        },
+        "viewerTimeout": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "default": 60000,
+          "description": "Timeout in milliseconds.",
+          "maximum": 2147483647
+        }
+      }
+    },
+    "server": {
+      "title": "GPU service configuration",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "devices"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "quality": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "high"
+                ],
+                "default": "low"
+              },
+              "devices": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "quality": {
+                      "const": "low"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "devices": {
+                      "maxItems": 1
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "description": "One active session per worker. GPU assignments must not overlap (checked at startup)."
+        },
+        "backend": {
+          "enum": [
+            "gpu",
+            "test"
+          ],
+          "default": "gpu"
+        },
+        "model_dir": {
+          "type": "string",
+          "default": "models/avatar"
+        },
+        "audio_model_dir": {
+          "type": "string",
+          "default": "models/audio"
+        },
+        "runtime_dir": {
+          "type": "string",
+          "default": "runtime"
+        },
+        "api_key": {
+          "type": "string",
+          "default": "",
+          "writeOnly": true,
+          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
+        },
+        "public_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://[^/@?#\\s]+(?:/[^?#\\s]*)?$",
+          "default": "http://localhost:7860",
+          "description": "HTTP(S) service URL. No embedded credentials, query, or fragment. OPENSPLINE_URL is used when omitted."
+        },
+        "session_ttl": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 3600,
+          "description": "Timeout in seconds."
+        },
+        "idle_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 120,
+          "description": "Timeout in seconds."
+        },
+        "token_ttl": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 300,
+          "description": "Timeout in seconds."
+        },
+        "startup_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 600,
+          "description": "Timeout in seconds."
+        },
+        "inference_timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 180,
+          "description": "Timeout in seconds."
+        },
+        "ice_servers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "urls"
+            ],
+            "properties": {
+              "urls": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
+              },
+              "username": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "credential": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "writeOnly": true
+              },
+              "credentialType": {
+                "const": "password"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

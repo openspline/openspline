@@ -1,0 +1,38 @@
+name: Build release artifacts
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: uv sync --all-packages --frozen && npm ci && npm run build
+      - run: uv run pytest && npm test && npm run check
+      - run: uv build --all-packages && npm pack --workspaces --pack-destination dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openspline-packages
+          path: dist/*
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: openspline:latest
+          outputs: type=docker,dest=/tmp/openspline-image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openspline-container
+          path: /tmp/openspline-image.tar

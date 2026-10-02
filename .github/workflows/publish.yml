@@ -1,0 +1,45 @@
+name: Publish approved release
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        type: choice
+        options: [python, npm, container]
+        required: true
+permissions:
+  contents: read
+  packages: write
+jobs:
+  publish:
+    environment: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: uv sync --all-packages --frozen && npm ci && npm run build && uv run pytest && npm test
+      - if: inputs.target == 'python'
+        run: uv build --all-packages && uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - if: inputs.target == 'npm'
+        run: npm publish --workspaces --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - if: inputs.target == 'container'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: inputs.target == 'container'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository }}:0.1.0

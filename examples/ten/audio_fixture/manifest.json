@@ -1,0 +1,1 @@
+{"type":"extension","name":"openspline_audio_fixture","version":"0.1.0","dependencies":[{"type":"system","name":"ten_runtime_python","version":"0.11.73"}],"api":{"data_in":[{"name":"avatar_session"}],"data_out":[{"name":"tts_audio_end"}],"audio_frame_out":[{"name":"pcm_frame"}]}}

@@ -1,0 +1,64 @@
+{
+  "name": "@openspline/node",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Add a live face to a Node voice agent",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./integrations": {
+      "types": "./dist/integrations.d.ts",
+      "import": "./dist/integrations.js"
+    },
+    "./livekit": {
+      "types": "./dist/livekit.d.ts",
+      "import": "./dist/livekit.js"
+    },
+    "./openai-agents": {
+      "types": "./dist/openai-agents.d.ts",
+      "import": "./dist/openai-agents.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  },
+  "peerDependencies": {
+    "@livekit/agents": "^1.9.1",
+    "@livekit/rtc-node": "^1.1.0",
+    "livekit-server-sdk": "^2",
+    "@openai/agents": "^0.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@livekit/agents": {
+      "optional": true
+    },
+    "@livekit/rtc-node": {
+      "optional": true
+    },
+    "livekit-server-sdk": {
+      "optional": true
+    },
+    "@openai/agents": {
+      "optional": true
+    }
+  }
+}

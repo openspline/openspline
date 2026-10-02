@@ -1,0 +1,24 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: uv sync --all-packages --frozen
+      - run: npm ci && npm run build && npm run check && npm test
+      - run: sh -n install.sh
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: uv run pytest
+      - run: node --check packages/server/src/openspline_server/static/demo.js
+      - run: uv build --all-packages

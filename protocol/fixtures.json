@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "audio": {"type":"audio","id":"audio-1","data":"AAAAAA==","format":{"sample_rate":24000,"channels":1,"encoding":"pcm_s16le"}},
+  "end_turn": {"type":"end_turn","id":"end-1","drain":false},
+  "interrupt": {"type":"interrupt","id":"interrupt-1"},
+  "playback": {"type":"played","samples":4,"epoch":0},
+  "capacity": {"error":{"code":"capacity","message":"All workers for this quality are occupied or unavailable"}},
+  "descriptor": {"id":"session-fixture","url":"http://localhost:7860","token":"playback-scoped-token","expires_at":2000000000,"viewer_url":"http://localhost:7860/view#session-fixture:playback-scoped-token"}
+}

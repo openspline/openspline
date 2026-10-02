@@ -1,0 +1,58 @@
+{
+  "nodes": [
+    {
+      "type": "extension",
+      "name": "avatar",
+      "addon": "openspline_avatar",
+      "extension_group": "default",
+      "property": {
+        "portrait": "/app/portrait.jpg",
+        "quality": "low"
+      }
+    },
+    {
+      "type": "extension",
+      "name": "source",
+      "addon": "openspline_audio_fixture",
+      "extension_group": "default"
+    }
+  ],
+  "connections": [
+    {
+      "extension": "source",
+      "audio_frame": [
+        {
+          "name": "pcm_frame",
+          "dest": [
+            {
+              "extension": "avatar"
+            }
+          ]
+        }
+      ],
+      "data": [
+        {
+          "name": "tts_audio_end",
+          "dest": [
+            {
+              "extension": "avatar"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "extension": "avatar",
+      "data": [
+        {
+          "name": "avatar_session",
+          "dest": [
+            {
+              "extension": "source"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
