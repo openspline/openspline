@@ -13,6 +13,8 @@ from .config import Settings, WorkerConfig
 
 def environment(root):
     load_dotenv(root / ".env", override=False)
+    # Match physical GPU indices reported by nvidia-smi, including mixed GPU hosts.
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     for key, relative in {
         "OPENSPLINE_MODEL_DIR": "models/avatar",
         "OPENSPLINE_AUDIO_MODEL_DIR": "models/audio",

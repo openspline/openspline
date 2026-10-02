@@ -38,6 +38,9 @@ class TestEngine:
 
 class GPUEngine:
     def __init__(self, settings, world_size):
+        from .hardware import validate_cuda
+
+        dtype = validate_cuda(int(os.environ.get("LOCAL_RANK", "0")))
         from ._vendor.flash_head import inference as inf
 
         self.inf = inf
@@ -46,6 +49,7 @@ class GPUEngine:
             settings["model_dir"],
             "lite" if settings["quality"] == "low" else "pro",
             settings["audio_model_dir"],
+            param_dtype=dtype,
         )
         self.params = inf.get_infer_params()
         self.fps = self.params["tgt_fps"]

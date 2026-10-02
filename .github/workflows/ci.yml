@@ -20,5 +20,10 @@ jobs:
       - run: sh -n install.sh && sh -n run.sh
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv run pytest
+      - name: Validate NVIDIA dependency locks
+        run: |
+          for cuda in cu126 cu128; do
+            uv pip install --dry-run --python .venv/bin/python --torch-backend "$cuda" --require-hashes -r requirements/server.txt -r "requirements/$cuda.txt"
+          done
       - run: node --check packages/server/src/openspline_server/static/demo.js
       - run: uv build --all-packages

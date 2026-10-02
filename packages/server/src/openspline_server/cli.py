@@ -17,7 +17,17 @@ AUDIO_REVISION = "22aad52d435eb6dbaf354bdad9b0da84ce7d6156"
 
 
 def download(args):
-    from huggingface_hub import HfApi, snapshot_download
+    from huggingface_hub import HfApi, constants, snapshot_download
+
+    if constants.HF_HUB_ENABLE_HF_TRANSFER:
+        try:
+            importlib.import_module("hf_transfer")
+        except ImportError:
+            # A shell or .env can enable an accelerator absent from our private venv.
+            # Hub caches this flag at import time, so update both it and child processes.
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+            constants.HF_HUB_ENABLE_HF_TRANSFER = False
+            print("Optional download accelerator unavailable; using the standard downloader.")
 
     root = Path(args.directory)
     root.mkdir(parents=True, exist_ok=True)

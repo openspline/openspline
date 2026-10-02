@@ -12,7 +12,7 @@ from pathlib import Path
 with (Path(__file__).parent / "configs/infer_params.yaml").open() as f:
     infer_params = yaml.safe_load(f)
 
-def get_pipeline(world_size, ckpt_dir, model_type, wav2vec_dir):
+def get_pipeline(world_size, ckpt_dir, model_type, wav2vec_dir, param_dtype=torch.bfloat16):
     global infer_params
     ulysses_degree, ring_degree = get_parallel_degree(world_size, infer_params['num_heads'])
     device = get_device(ulysses_degree, ring_degree)
@@ -23,6 +23,7 @@ def get_pipeline(world_size, ckpt_dir, model_type, wav2vec_dir):
         model_type=model_type,
         wav2vec_dir=wav2vec_dir,
         device=device,
+        param_dtype=param_dtype,
         use_usp=(world_size > 1),
     )
 
@@ -76,4 +77,3 @@ def run_pipeline(pipeline, audio_embedding):
     sample = pipeline.generate(audio_embedding)
     sample_frames = (((sample+1)/2).permute(1,2,3,0).clip(0,1) * 255).contiguous()
     return sample_frames
-

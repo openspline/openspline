@@ -46,7 +46,7 @@ else
   tar -xzf "$temporary_dir/source.tar.gz" --strip-components=1 -C "$temporary_dir/source"
   source_dir="$temporary_dir/source"
 fi
-for file in packages/server/pyproject.toml requirements/server.txt run.sh; do
+for file in packages/server/pyproject.toml requirements/server.txt requirements/cu126.txt requirements/cu128.txt run.sh; do
   if [ ! -f "$source_dir/$file" ]; then
     echo "openspline: source is missing $file" >&2
     exit 1
@@ -80,8 +80,17 @@ if [ ! -x "$python" ]; then
 fi
 "$python" -c 'import sys; assert (3, 10) <= sys.version_info[:2] < (3, 13), "Python 3.10–3.12 required"'
 echo "Installing the GPU service and SDK..."
-"$uv" pip install --python "$python" --require-hashes -r "$install_dir/requirements/server.txt"
+# Install common packages first so GPU selection can read workers.yaml and .env.
+# --no-deps prevents torch from being pulled from PyPI before its CUDA build is selected.
+"$uv" pip install --python "$python" --no-deps --require-hashes -r "$install_dir/requirements/server.txt"
+cd "$install_dir"
+export PYTHONPATH="$install_dir/packages/server/src${PYTHONPATH:+:$PYTHONPATH}"
+cuda=$("$python" -m openspline_server.hardware)
+case "$cuda" in cu126|cu128) ;; *) echo "openspline: could not select a CUDA runtime" >&2; exit 1 ;; esac
+echo "Installing PyTorch for $cuda..."
+"$uv" pip install --python "$python" --torch-backend "$cuda" --require-hashes -r "$install_dir/requirements/server.txt" -r "$install_dir/requirements/$cuda.txt"
 "$uv" pip install --python "$python" --no-deps "$install_dir/packages/server" "$install_dir/packages/python"
+"$python" -m openspline_server.hardware --check
 
 sh "$install_dir/run.sh" --prepare --save-selection
 echo "Installed in $install_dir. Restart with: sh \"$install_dir/run.sh\""

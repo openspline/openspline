@@ -32,6 +32,8 @@ npm install @openspline/node
 
 The installer creates a private Python environment, downloads models, and runs the service in your terminal. It defaults to GPU 0; select another with `curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh`. No sudo is needed. Press Ctrl-C to stop; restart with `sh ~/.local/share/openspline/run.sh`.
 
+PyTorch's CUDA build is selected automatically: CUDA 12.8 for Blackwell (including RTX 50-series), and CUDA 12.6 for older NVIDIA GPUs. Pre-Ampere cards use FP32, which needs more VRAM and may be slower. A compatible NVIDIA driver and enough VRAM are required; AMD and Apple GPUs are not supported by this backend. Blackwell and pre-Ampere inference still need hardware validation.
+
 Python usage:
 
 ```python
@@ -193,6 +195,8 @@ Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, `OPENSPLINE_PUBLIC_URL`, and provider 
 <summary>Development and validation</summary>
 
 Run `uv sync --all-packages`, `npm ci && npm run build`, then `uv run pytest && npm test`. `uv run openspline serve --backend test --dev` starts a static-portrait development service without a GPU. Keep optional framework environments separate; from `examples/python`, use `uv pip sync requirements.lock` in an activated environment. Release workflows build and optionally publish Python and npm packages.
+
+Regenerate the native installer dependency locks with `python scripts/lock-gpu.py` (requires `uv`). The installer combines `requirements/server.txt` with the selected `cu126.txt` or `cu128.txt` runtime lock.
 
 Real low/high inference, GPU streaming, browser/React playback, and native LiveKit have been exercised. Short A100 tests measured about 64 FPS for low quality and 8 FPS for high quality under different load conditions; these are engine rates, not playback latency. Long-duration, multi-GPU, cloud-provider, and TEN runtime validation remain incomplete.
 
