@@ -147,6 +147,12 @@ def create_app(settings: Settings | None = None):
                 f'openspline_queue_seconds{{session="{s.id}"}} {(s.timeline.submitted - s.timeline.played) / 48000}'
             )
             lines.append(f'openspline_queue_packets{{session="{s.id}"}} {s.input.qsize()}')
+            lines.append(
+                f'openspline_generated_ahead_seconds{{session="{s.id}"}} {(s.timeline.submitted - s.timeline.sent) / 48000}'
+            )
+            lines.append(
+                f'openspline_unacknowledged_seconds{{session="{s.id}"}} {(s.timeline.sent - s.timeline.played) / 48000}'
+            )
             for k, v in s.metrics.items():
                 lines.append(f'openspline_{k}{{session="{s.id}"}} {v}')
         return "\n".join(lines) + "\n"
@@ -345,6 +351,13 @@ def create_app(settings: Settings | None = None):
                     samples = event.get("samples")
                     if type(samples) is int and samples >= 0:
                         s.playback(samples, event.get("epoch"))
+                elif event.get("type") == "playback_stats" and event.get("epoch") == s.epoch:
+                    buffer_ms, underruns = event.get("buffer_ms"), event.get("underruns")
+                    if type(buffer_ms) is int and type(underruns) is int:
+                        s.metrics["playback_buffer_seconds"] = max(0, min(2000, buffer_ms)) / 1000
+                        s.metrics["playback_underruns"] = max(
+                            s.metrics.get("playback_underruns", 0), min(1000000, underruns)
+                        )
         except (WebSocketDisconnect, RuntimeError):
             pass
         except (HTTPException, ValueError, TypeError, asyncio.TimeoutError):

@@ -8,6 +8,8 @@ import io
 from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
+PLAYBACK_WINDOW_SAMPLES = 48000
+
 
 def jpeg(frame):
     output = io.BytesIO()
@@ -36,11 +38,12 @@ class SocketPlayback:
             while not self.events.empty():
                 await self.websocket.send_json(self.events.get_nowait())
             timeline = s.timeline
-            # At most 200ms may leave the server without playback feedback.
-            # Stalled/paused clients therefore backpressure generation too.
+            # Feedback arrives after playback + output latency + network RTT.
+            # A 200ms window starves even realtime generation over ordinary WANs.
+            # Keep at most one second outstanding; paused viewers still backpressure.
             if (
                 s.viewer_ready.is_set()
-                and timeline.sent - timeline.played < 9600
+                and timeline.sent - timeline.played < PLAYBACK_WINDOW_SAMPLES
                 and (timeline.current is not None or timeline.queue)
             ):
                 epoch = s.epoch

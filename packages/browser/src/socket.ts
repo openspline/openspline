@@ -1,4 +1,5 @@
 import type {SessionDescriptor} from './index.js';
+import {nextPlayoutTime} from './playout.js';
 
 /** PCM and JPEG share the Web Audio clock; feedback bounds the server's queue. */
 export class SocketPlayback extends EventTarget {
@@ -19,6 +20,10 @@ export class SocketPlayback extends EventTarget {
   private originalMuted: boolean;
   private portrait?:ImageBitmap;
   private idle=true;
+  private underruns=0;
+  private lastSamples=0;
+  private turnEnds=new Set<number>();
+  private lastStats=0;
   constructor(private session:SessionDescriptor, private video:HTMLVideoElement) {
     super();this.originalMuted=video.muted;
   }
@@ -35,7 +40,7 @@ export class SocketPlayback extends EventTarget {
     socket.onclose=e=>this.fail(e.reason||'Playback connection closed. Start a new session.');
     let messages=Promise.resolve();
     socket.onmessage=({data})=>{
-      // Preserve decode order. The server limits outstanding audio to 200ms.
+      // Preserve decode order. The server bounds outstanding audio to one second.
       messages=messages.then(()=>this.receive(JSON.parse(data))).catch(error=>this.fail(String(error)));
     };
   }
@@ -66,7 +71,11 @@ export class SocketPlayback extends EventTarget {
       if(this.closed||event.epoch!==this.epoch){image.close();return;}
       const context=this.context!,buffer=context.createBuffer(1,bytes.length/2,48000),samples=buffer.getChannelData(0),view=new DataView(bytes.buffer);
       for(let i=0;i<samples.length;i++)samples[i]=view.getInt16(i*2,true)/32768;
-      const at=Math.max(context.currentTime+0.04,this.end);
+      const now=context.currentTime;
+      const at=nextPlayoutTime(now,this.end);
+      if(this.end>0&&at>this.end&&!this.turnEnds.has(this.lastSamples))this.underruns++;
+      this.lastSamples=event.samples;
+      for(const end of this.turnEnds)if(end<event.samples)this.turnEnds.delete(end);
       const source=context.createBufferSource();source.buffer=buffer;source.connect(context.destination);
       this.sources.add(source);source.onended=()=>{this.sources.delete(source);source.disconnect();};source.start(at);
       this.end=at+buffer.duration;
@@ -78,13 +87,17 @@ export class SocketPlayback extends EventTarget {
       if(event.type==='interrupted'){this.epoch=event.epoch;this.clear();this.event('statechange','ready');}
       if(event.type==='playback_ready')this.event('statechange','ready');
       if(event.type==='speaking')this.event('statechange','speaking');
-      if(event.type==='turn_end')this.event('turnend',event);
+      if(event.type==='turn_end'){this.turnEnds.add(event.target_samples);this.event('turnend',event);}
       if(event.type==='error')this.fail(event.message);
       this.event('event',event);
     }
   }
   private tick() {
     const context=this.context;if(!context||context.state!=='running')return;
+    if(context.currentTime-this.lastStats>=1){
+      this.lastStats=context.currentTime;
+      this.send({type:'playback_stats',epoch:this.epoch,buffer_ms:Math.round(Math.max(0,this.end-context.currentTime)*1000),underruns:this.underruns});
+    }
     while(this.frames.length&&this.frames[0].at<=context.currentTime){
       const {image}=this.frames.shift()!;this.canvas.getContext('2d')!.drawImage(image,0,0,512,512);image.close();
     }
@@ -103,6 +116,7 @@ export class SocketPlayback extends EventTarget {
     for(const source of this.sources){source.stop();source.disconnect();}this.sources.clear();
     for(const frame of this.frames)frame.image.close();this.frames=[];
     this.acknowledgments=[];this.end=0;
+    this.lastSamples=0;this.turnEnds.clear();
     if(this.portrait)this.canvas.getContext('2d')!.drawImage(this.portrait,0,0,512,512);
   }
   close() {
