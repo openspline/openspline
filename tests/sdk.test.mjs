@@ -17,16 +17,16 @@ test('OpenAI truncation uses played audio and Agents generation end flushes',asy
 });
 import {AvatarSession} from '../packages/node/dist/index.js';
 test('client config overrides environment and is immutable',()=>{
- const oldUrl=process.env.OPENSPLINE_URL,oldKey=process.env.OPENSPLINE_API_KEY;
+ const oldUrl=process.env.OPENSPLINE_URL;
  try{
-  process.env.OPENSPLINE_URL='not a url';process.env.OPENSPLINE_API_KEY='environment-key';
-  const options={url:'https://service.example///',apiKey:'',quality:'high',timeout:1000,viewerTimeout:1};
+  process.env.OPENSPLINE_URL='not a url';
+  const options={url:'https://service.example///',quality:'high',timeout:1000,viewerTimeout:1};
   const client=new Openspline(options);options.quality='low';
-  assert.equal(client.url,'https://service.example');assert.equal(client.apiKey,'');assert.equal(client.config.quality,'high');assert.ok(Object.isFrozen(client.config));
- }finally{if(oldUrl===undefined)delete process.env.OPENSPLINE_URL;else process.env.OPENSPLINE_URL=oldUrl;if(oldKey===undefined)delete process.env.OPENSPLINE_API_KEY;else process.env.OPENSPLINE_API_KEY=oldKey;}
+  assert.equal(client.url,'https://service.example');assert.equal(client.config.quality,'high');assert.ok(Object.isFrozen(client.config));
+ }finally{if(oldUrl===undefined)delete process.env.OPENSPLINE_URL;else process.env.OPENSPLINE_URL=oldUrl;}
 });
 test('invalid configuration fails before network requests',()=>{
- for(const config of [{quality:'pro'},{timeout:0},{timeout:Infinity},{viewerTimeout:NaN},{viewerTimeout:.5},{url:'ftp://example.com'},{url:'https://user:secret@example.com'},{url:''},{apiKey:123},{quailty:'high'}])assert.throws(()=>new Openspline(config),TypeError);
+ for(const config of [{quality:'pro'},{timeout:0},{timeout:Infinity},{viewerTimeout:NaN},{viewerTimeout:.5},{url:'ftp://example.com'},{url:'https://user:secret@example.com'},{url:''},{apiKey:'removed'},{quailty:'high'}])assert.throws(()=>new Openspline(config),TypeError);
 });
 test('configured quality reaches the session request and can be overridden',async()=>{
  const client=new Openspline({quality:'high'});const seen=[];

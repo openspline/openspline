@@ -2,34 +2,35 @@
 
 **Add a live face to any voice AI agent in five lines.** Turn a portrait and generated audio into synchronized video and speech on your own GPU.
 
-[Quick start](#quick-start) · [Connectors](#connectors) · [Configuration](#configuration) · [Frontend](#frontend)
-
 - **Bring your agent.** Keep your prompts, tools, microphone, and voice provider.
 - **Python first, Node supported.** Stream audio or use a ready-made connector.
 - **Ready to display.** Built-in viewer, React component, and web component.
 - **Self-hosted.** One active session per GPU worker; add GPUs for concurrency.
 
+- [openspline](#openspline)
+  - [Quick start](#quick-start)
+  - [Connectors](#connectors)
+    - [OpenAI Realtime](#openai-realtime)
+    - [LiveKit](#livekit)
+    - [Gemini Realtime](#gemini-realtime)
+    - [Custom connector](#custom-connector)
+  - [Configuration](#configuration)
+  - [Node](#node)
+  - [Frontend](#frontend)
+  - [GPU workers](#gpu-workers)
+  - [License](#license)
 ## Quick start
 
-Start the GPU service on Linux with Docker and NVIDIA Container Toolkit:
+On a Linux GPU machine with Docker and NVIDIA Container Toolkit:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | sh
-```
-
-This creates a service key, downloads the low-quality model, and starts openspline at **http://localhost:7860**. Existing configuration is preserved when the command is run again. Set `OPENSPLINE_VERSION=v0.1.0` before the command to install a release, or `OPENSPLINE_INSTALL_DIR` to choose a directory.
-
-Install the Python SDK with one command (Python 3.10–3.12):
-
-```bash
 pip install openspline
+# or, for Node.js
+npm install @openspline/node
 ```
 
-Load the generated service key and add the five-line client to your agent:
-
-```bash
-export OPENSPLINE_API_KEY=$(sed -n 's/^OPENSPLINE_API_KEY=//p' ~/.local/share/openspline/.env)
-```
+Python usage:
 
 ```python
 from openspline import Openspline
@@ -40,6 +41,7 @@ async with client.avatar("portrait.jpg", quality="low") as avatar:
 ```
 
 `stream()` accepts generated PCM audio and returns after playback finishes. WAV and MP3 files are also supported.
+
 
 ## Connectors
 
@@ -122,7 +124,7 @@ Pass settings directly when initializing, or reuse a typed config object:
 ```python
 from openspline import Openspline, OpensplineConfig
 
-client = Openspline(url="http://localhost:7860", api_key="your-service-key", quality="low")
+client = Openspline(url="http://localhost:7860", quality="low")
 config = OpensplineConfig(quality="high", timeout=300, viewer_timeout=90)
 client = Openspline(config=config) # a dict works too
 ```
@@ -130,12 +132,11 @@ client = Openspline(config=config) # a dict works too
 | Python / Node option | Default | Purpose |
 | --- | --- | --- |
 | `url` | `OPENSPLINE_URL` or `http://localhost:7860` | Service address |
-| `api_key` / `apiKey` | `OPENSPLINE_API_KEY` or empty | Backend credential |
 | `quality` | `low` | Default quality: `low` or `high` |
 | `timeout` | 180 s / 180,000 ms | HTTP and audio request timeout |
 | `viewer_timeout` / `viewerTimeout` | 60 s / 60,000 ms | Wait for the playback destination |
 
-Explicit Python parameters override the config object; explicit settings override environment defaults. `avatar(..., quality="high")` overrides that session only. Invalid configuration fails before connecting. [JSON Schema](config.schema.json) describes Python settings, with `#/$defs/node` and `#/$defs/server` for Node and worker configuration. Keep client configuration private; only `avatar.session` is browser-safe.
+Explicit Python parameters override the config object; explicit settings override environment defaults. `avatar(..., quality="high")` overrides that session only. Invalid configuration fails before connecting. [JSON Schema](config.schema.json) describes Python settings, with `#/$defs/node` and `#/$defs/server` for Node and worker configuration. Only `avatar.session` should be passed to a browser.
 
 ## Node
 
@@ -158,7 +159,7 @@ await avatar.stream(agent.audioStream(), { sample_rate: 24000 });
 
 ## Frontend
 
-Pass `avatar.session` from your backend to your frontend. Never expose the service API key or publisher token.
+Pass `avatar.session` from your backend to your frontend. Keep the publisher token on the backend.
 
 ```tsx
 import { Avatar } from "@openspline/react";
@@ -182,7 +183,7 @@ workers:
 
 For high quality, set a worker's quality to `high` and `OPENSPLINE_DOWNLOAD_QUALITY=all` before Compose startup. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. A high-quality worker can reserve multiple GPUs with the server's `distributed` extra. IDs are relative to `CUDA_VISIBLE_DEVICES` when set.
 
-For remote playback, set `OPENSPLINE_PUBLIC_URL`, use HTTPS and reachable WebRTC UDP ports, and configure `ice_servers` for TURN when needed. Compose uses Linux host networking. API reference: **http://localhost:7860/docs**. Health: `/readyz`; authenticated metrics: `/metrics`.
+For remote playback, set `OPENSPLINE_PUBLIC_URL`, use HTTPS and reachable WebRTC UDP ports, and configure `ice_servers` for TURN when needed. Compose uses Linux host networking. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
 
 <details>
 <summary>Development and validation</summary>

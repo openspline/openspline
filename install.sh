@@ -60,12 +60,7 @@ if [ -n "$saved_env" ]; then
   cp "$saved_env" "$install_dir/.env"
 else
   umask 077
-  if command -v openssl >/dev/null 2>&1; then
-    api_key=$(openssl rand -hex 32)
-  else
-    api_key=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
-  fi
-  sed "s/replace-with-a-random-secret/${api_key}/" "$install_dir/.env.example" > "$install_dir/.env"
+  cp "$install_dir/.env.example" "$install_dir/.env"
 fi
 
 if [ -n "$saved_workers" ]; then

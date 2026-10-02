@@ -23,7 +23,6 @@ def test_node_against_service(tmp_path):
         **os.environ,
         "OPENSPLINE_URL": url,
         "OPENSPLINE_PUBLIC_URL": url,
-        "OPENSPLINE_API_KEY": "conformance",
         "OPENSPLINE_RUNTIME_DIR": str(tmp_path / "runtime"),
     }
     process = subprocess.Popen(

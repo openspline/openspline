@@ -22,7 +22,6 @@ class Settings:
         default_factory=lambda: os.getenv("OPENSPLINE_AUDIO_MODEL_DIR", "models/audio")
     )
     runtime_dir: str = field(default_factory=lambda: os.getenv("OPENSPLINE_RUNTIME_DIR", "runtime"))
-    api_key: str = field(default_factory=lambda: os.getenv("OPENSPLINE_API_KEY", ""))
     public_url: str = field(
         default_factory=lambda: os.getenv("OPENSPLINE_PUBLIC_URL", "http://localhost:7860")
     )

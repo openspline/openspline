@@ -9,7 +9,7 @@ function connect(path,token){return new Promise((resolve,reject)=>{ws=new WebSoc
 $('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('status').textContent='Preparing your avatar…';try{
  const form=new FormData();form.set('portrait',$('portrait').files[0]);form.set('quality',$('quality').value);
  const playbackReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('Playback did not connect')),60000);const ready=e=>{if(e.detail==='ready'){clearTimeout(timer);$('avatar').removeEventListener('statechange',ready);resolve();}};$('avatar').addEventListener('statechange',ready);});playbackReady.catch(()=>{});
- session=await request('/v1/sessions',{method:'POST',headers:{Authorization:`Bearer ${$('key').value}`},body:form});
+ session=await request('/v1/sessions',{method:'POST',body:form});
  $('avatar').session={id:session.id,url:location.origin,token:session.token};$('avatar').hidden=false;$('empty').hidden=true;$('portrait-preview').hidden=true;$('stop').hidden=false;
  const source=$('source').value;
  await connect(`/v1/sessions/${session.id}/${source==='file'?'audio':'demo/'+source}`,session.publisher_token);

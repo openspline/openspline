@@ -170,10 +170,6 @@ def main():
         from .app import create_app
 
         settings = Settings.from_file(args.config, backend=args.backend)
-        if not settings.api_key and not (
-            args.dev and args.host in {"127.0.0.1", "localhost", "::1"}
-        ):
-            parser.error("Set OPENSPLINE_API_KEY, or use --dev on localhost")
         if args.backend == "test":
             print("TEST BACKEND: static portraits, no avatar inference.")
         uvicorn.run(create_app(settings), host=args.host, port=args.port, access_log=False)

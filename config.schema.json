@@ -15,12 +15,6 @@
           "default": "http://localhost:7860",
           "description": "HTTP(S) service URL. No embedded credentials, query, or fragment. OPENSPLINE_URL is used when omitted."
         },
-        "api_key": {
-          "type": "string",
-          "default": "",
-          "writeOnly": true,
-          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
-        },
         "quality": {
           "type": "string",
           "enum": [
@@ -54,12 +48,6 @@
           "pattern": "^https?://[^/@?#\\s]+(?:/[^?#\\s]*)?$",
           "default": "http://localhost:7860",
           "description": "HTTP(S) service URL. No embedded credentials, query, or fragment. OPENSPLINE_URL is used when omitted."
-        },
-        "apiKey": {
-          "type": "string",
-          "default": "",
-          "writeOnly": true,
-          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
         },
         "quality": {
           "type": "string",
@@ -162,12 +150,6 @@
         "runtime_dir": {
           "type": "string",
           "default": "runtime"
-        },
-        "api_key": {
-          "type": "string",
-          "default": "",
-          "writeOnly": true,
-          "description": "Backend API key. OPENSPLINE_API_KEY is used when omitted. Never send this config to a browser."
         },
         "public_url": {
           "type": "string",

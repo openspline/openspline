@@ -12,7 +12,6 @@ Quality = Literal["low", "high"]
 @dataclass(frozen=True)
 class OpensplineConfig:
     url: str = field(default_factory=lambda: os.getenv("OPENSPLINE_URL", "http://localhost:7860"))
-    api_key: str = field(default_factory=lambda: os.getenv("OPENSPLINE_API_KEY", ""), repr=False)
     quality: Quality = "low"
     timeout: float = 180
     viewer_timeout: float = 60
@@ -36,8 +35,6 @@ class OpensplineConfig:
             raise ValueError(
                 "url must be an HTTP or HTTPS URL without credentials, query, or fragment"
             )
-        if not isinstance(self.api_key, str):
-            raise ValueError("api_key must be a string")
         if self.quality not in ("low", "high"):
             raise ValueError("quality must be low or high")
         for name in ("timeout", "viewer_timeout"):

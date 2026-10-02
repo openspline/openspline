@@ -11,14 +11,14 @@ export class ConnectionError extends OpensplineError {}
 export class InferenceError extends OpensplineError {}
 function failure(code:string,message:string) { const C = ({capacity:CapacityError,configuration:ConfigurationError,connection:ConnectionError,inference:InferenceError} as Record<string,typeof OpensplineError>)[code] ?? OpensplineError;return new C(message,code); }
 export class Openspline {
-  readonly url:string;readonly apiKey:string;readonly timeout:number;
+  readonly url:string;readonly timeout:number;
   readonly config:Readonly<Required<OpensplineConfig>>;
-  constructor(options:OpensplineConfig={}) {this.config=resolveConfig(options);this.url=this.config.url;this.apiKey=this.config.apiKey;this.timeout=this.config.timeout;}
+  constructor(options:OpensplineConfig={}) {this.config=resolveConfig(options);this.url=this.config.url;this.timeout=this.config.timeout;}
   async avatar(portrait:string|Uint8Array,options:{quality?:Quality}={}):Promise<AvatarSession> {
     const quality=options.quality??this.config.quality;if(!['low','high'].includes(quality))throw new ConfigurationError('quality must be low or high','configuration');
     const form=new FormData();const bytes=typeof portrait==='string'?await readFile(portrait):portrait;
     form.set('portrait',new Blob([new Uint8Array(bytes)]),'portrait');form.set('quality',quality);
-    const body=await this.request('/v1/sessions',{method:'POST',headers:{Authorization:`Bearer ${this.apiKey}`},body:form});
+    const body=await this.request('/v1/sessions',{method:'POST',body:form});
     const avatar=new AvatarSession(this,body);
     try {await avatar.connect();return avatar;} catch(error) {await avatar.close();throw error;}
   }

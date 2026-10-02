@@ -8,23 +8,20 @@ from openspline import Openspline, OpensplineConfig
 
 def test_config_precedence_and_session_override(monkeypatch):
     monkeypatch.setenv("OPENSPLINE_URL", "http://environment:7860")
-    monkeypatch.setenv("OPENSPLINE_API_KEY", "environment-key")
     config = OpensplineConfig(quality="high", timeout=300)
-    client = Openspline(config=config, url="https://service.example/", api_key="", timeout=12)
+    client = Openspline(config=config, url="https://service.example/", timeout=12)
     assert client.url == "https://service.example"
-    assert client.api_key == ""
     assert client.timeout == 12
     assert client.avatar("unused.png").quality == "high"
     assert client.avatar("unused.png", quality="low").quality == "low"
     assert config.timeout == 300
-    assert "environment-key" not in repr(config)
 
 
-def test_dict_config_and_legacy_constructor(monkeypatch):
+def test_dict_config_and_direct_constructor(monkeypatch):
     monkeypatch.setenv("OPENSPLINE_URL", "invalid environment default")
-    client = Openspline("http://localhost:7860/", "key", 30, config={"quality": "high"})
+    client = Openspline("http://localhost:7860/", 30, config={"quality": "high"})
     assert client.config == OpensplineConfig(
-        url="http://localhost:7860", api_key="key", timeout=30, quality="high"
+        url="http://localhost:7860", timeout=30, quality="high"
     )
     with pytest.raises(TypeError):
         Openspline(config={"quailty": "high"})
@@ -43,7 +40,6 @@ def test_dict_config_and_legacy_constructor(monkeypatch):
         {"timeout": float("inf")},
         {"viewer_timeout": True},
         {"viewer_timeout": -1},
-        {"api_key": 123},
     ],
 )
 def test_invalid_configuration_fails_at_initialization(settings):

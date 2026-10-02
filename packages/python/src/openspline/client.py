@@ -23,7 +23,6 @@ class Openspline:
     def __init__(
         self,
         url: str | None = None,
-        api_key: str | None = None,
         timeout: float | None = None,
         *,
         quality: Quality | None = None,
@@ -42,7 +41,6 @@ class Openspline:
             key: value
             for key, value in {
                 "url": url,
-                "api_key": api_key,
                 "timeout": timeout,
                 "quality": quality,
                 "viewer_timeout": viewer_timeout,
@@ -51,7 +49,6 @@ class Openspline:
         }
         self.config = OpensplineConfig(**(values | overrides))
         self.url = self.config.url
-        self.api_key = self.config.api_key
         self.timeout = self.config.timeout
 
     def avatar(self, portrait, quality: Quality | None = None):
@@ -89,11 +86,6 @@ class AvatarSession:
                 raw = bytes(self.portrait)
             response = await self.http.post(
                 "/v1/sessions",
-                headers=(
-                    {"Authorization": "Bearer " + self.client.api_key}
-                    if self.client.api_key
-                    else {}
-                ),
                 files={"portrait": ("portrait", raw)},
                 data={"quality": self.quality},
             )

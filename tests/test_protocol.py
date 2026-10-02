@@ -13,22 +13,16 @@ def image(color="blue"):
     return b.getvalue()
 
 
-def test_auth_capacity_tokens_and_release(tmp_path):
-    with TestClient(
-        create_app(Settings(backend="test", runtime_dir=str(tmp_path), api_key="test-key"))
-    ) as client:
+def test_capacity_session_tokens_and_release(tmp_path):
+    with TestClient(create_app(Settings(backend="test", runtime_dir=str(tmp_path)))) as client:
         assert client.get("/readyz").status_code == 200
-        assert (
-            client.post("/v1/sessions", files={"portrait": ("p.png", image())}).status_code == 401
-        )
-        auth = {"Authorization": "Bearer test-key"}
-        r = client.post("/v1/sessions", headers=auth, files={"portrait": ("p.png", image())})
+        r = client.post("/v1/sessions", files={"portrait": ("p.png", image())})
         assert r.status_code == 201, r.text
         s = r.json()
         assert "publisher_token" in s
         assert (
             client.post(
-                "/v1/sessions", headers=auth, files={"portrait": ("p.png", image())}
+                "/v1/sessions", files={"portrait": ("p.png", image())}
             ).status_code
             == 429
         )
@@ -48,7 +42,7 @@ def test_auth_capacity_tokens_and_release(tmp_path):
         )
         assert (
             client.post(
-                "/v1/sessions", headers=auth, files={"portrait": ("p.png", image("red"))}
+                "/v1/sessions", files={"portrait": ("p.png", image("red"))}
             ).status_code
             == 201
         )

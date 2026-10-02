@@ -93,12 +93,6 @@ def create_app(settings: Settings | None = None):
         )
         return JSONResponse({"error": detail}, status_code=exc.status_code)
 
-    def admin(request):
-        if settings.api_key and not secrets.compare_digest(
-            request.headers.get("authorization", ""), "Bearer " + settings.api_key
-        ):
-            raise HTTPException(401, {"code": "auth", "message": "Invalid service API key"})
-
     def get(id):
         s = sessions.get(id)
         if not s or s.closed:
@@ -135,8 +129,7 @@ def create_app(settings: Settings | None = None):
         )
 
     @app.get("/metrics", response_class=PlainTextResponse)
-    async def metrics(request: Request):
-        admin(request)
+    async def metrics():
         lines = ["# TYPE openspline_worker_occupied gauge"]
         for w in pool.workers:
             label = json.dumps(w.config.id)
@@ -158,10 +151,7 @@ def create_app(settings: Settings | None = None):
         return "\n".join(lines) + "\n"
 
     @app.post("/v1/sessions", status_code=201)
-    async def create(
-        request: Request, portrait: UploadFile = File(...), quality: str = Form("low")
-    ):
-        admin(request)
+    async def create(portrait: UploadFile = File(...), quality: str = Form("low")):
         if quality not in {"low", "high"}:
             raise HTTPException(422, "quality must be low or high")
         raw = await portrait.read(10 * 1024 * 1024 + 1)

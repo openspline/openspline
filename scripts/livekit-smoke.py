@@ -38,7 +38,7 @@ async def main():
 
     await room.connect("ws://127.0.0.1:7880", token("agent"))
     try:
-        async with Openspline(url="http://127.0.0.1:7861", api_key="local-test-key").avatar(
+        async with Openspline(url="http://127.0.0.1:7861").avatar(
             image
         ) as avatar:
             response = await avatar.http.post(
