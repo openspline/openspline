@@ -22,6 +22,16 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+# A runtime entry in Docker's configuration can outlive the toolkit package.
+# This installer targets a local Linux Docker host (also required by host networking).
+if ! command -v nvidia-container-runtime >/dev/null 2>&1 \
+    || ! nvidia-container-runtime --version >/dev/null 2>&1; then
+  echo "openspline: nvidia-container-runtime is missing or cannot run" >&2
+  echo "Install NVIDIA Container Toolkit on the Docker host before continuing:" >&2
+  echo "https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html" >&2
+  exit 1
+fi
+
 if ! docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
   echo "openspline: Docker cannot find the NVIDIA container runtime" >&2
   echo "Install NVIDIA Container Toolkit and configure Docker before continuing" >&2
