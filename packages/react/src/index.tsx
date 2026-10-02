@@ -5,7 +5,7 @@ export type {SessionDescriptor};
 export function useAvatar(session:SessionDescriptor){
   const videoRef=useRef<HTMLVideoElement>(null);const connection=useRef<AvatarConnection|null>(null);
   const [state,setState]=useState<AvatarState>('idle');const [error,setError]=useState<string>();const [blocked,setBlocked]=useState(false);
-  useEffect(()=>{if(!videoRef.current)return;const next=new AvatarConnection(session,videoRef.current);connection.current=next;setError(undefined);next.addEventListener('statechange',e=>setState((e as CustomEvent).detail));next.addEventListener('autoplayblocked',()=>setBlocked(true));next.connect().catch(e=>setError(String(e)));return()=>next.close();},[session.id,session.url,session.token]);
+  useEffect(()=>{if(!videoRef.current)return;const next=new AvatarConnection(session,videoRef.current);connection.current=next;setError(undefined);setBlocked(false);next.addEventListener('statechange',e=>setState((e as CustomEvent).detail));next.addEventListener('error',e=>setError(String((e as CustomEvent).detail)));next.addEventListener('autoplayblocked',()=>setBlocked(true));next.connect().catch(e=>setError(String(e)));return()=>next.close();},[session.id,session.url,session.token,session.transport]);
   return {videoRef,state,error,blocked,play:async()=>{await connection.current?.play();setBlocked(false);}};
 }
 export function Avatar({session,className,style,onStateChange}:{session:SessionDescriptor;className?:string;style?:CSSProperties;onStateChange?:(state:AvatarState)=>void}){

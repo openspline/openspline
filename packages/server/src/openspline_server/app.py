@@ -31,6 +31,7 @@ from PIL import Image, UnidentifiedImageError
 from .config import Settings
 from .media import AudioTrack, VideoTrack
 from .session import Session
+from .socket_playback import SocketPlayback
 from .worker import CapacityError, WorkerPool
 
 STATIC = Path(__file__).parent / "static"
@@ -242,9 +243,9 @@ def create_app(settings: Settings | None = None):
     async def offer(id: str, request: Request):
         s = get(id)
         authorize(request, s, True)
-        if s.pc or s.native_sink:
-            raise HTTPException(409, "This session already has a playback destination")
         body = await request.json()
+        if s.pc or s.native_sink or s.socket_sink:
+            raise HTTPException(409, "This session already has a playback destination")
         if len(body.get("sdp", "")) > 65536 or body.get("type") != "offer":
             raise HTTPException(422, "Invalid SDP offer")
         pc = RTCPeerConnection(
@@ -305,6 +306,60 @@ def create_app(settings: Settings | None = None):
             await pc.close()
             s.pc = None
             raise
+
+    @app.websocket("/v1/sessions/{id}/playback")
+    async def playback(ws: WebSocket, id: str):
+        await ws.accept()
+        sink = None
+        sender = None
+        s = None
+        try:
+            s = get(id)
+            hello = await asyncio.wait_for(ws.receive_json(), 10)
+            if not isinstance(hello, dict):
+                raise ValueError("Expected a playback token")
+            token = hello.get("token", "")
+            if (
+                not isinstance(token, str)
+                or not secrets.compare_digest(token, s.viewer_token)
+                or time.time() > s.token_expires
+            ):
+                await ws.close(code=4401, reason="Playback credentials expired or invalid")
+                return
+            if s.pc or s.native_sink or s.socket_sink:
+                await ws.close(code=4409, reason="Session already has a playback destination")
+                return
+            # No await between the ownership check and reservation.
+            sink = s.socket_sink = SocketPlayback(s, ws)
+            sender = asyncio.create_task(sink.send())
+            while not s.closed:
+                event = await asyncio.wait_for(ws.receive_json(), 60)
+                if not isinstance(event, dict):
+                    raise ValueError("Expected a playback event")
+                s.touch()
+                if event.get("type") == "ready":
+                    s.viewer_ready.set()
+                    sink.emit({"type": "playback_ready", "epoch": s.epoch})
+                    s.emit({"type": "viewer_ready"})
+                elif event.get("type") == "played":
+                    samples = event.get("samples")
+                    if type(samples) is int and samples >= 0:
+                        s.playback(samples, event.get("epoch"))
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        except (HTTPException, ValueError, TypeError, asyncio.TimeoutError):
+            with contextlib.suppress(RuntimeError):
+                await ws.close(code=4400, reason="Invalid or inactive playback connection")
+        finally:
+            if sender:
+                sender.cancel()
+                with contextlib.suppress(asyncio.CancelledError, RuntimeError, WebSocketDisconnect):
+                    await sender
+            if sink and s.socket_sink is sink:
+                s.socket_sink = None
+                s.viewer_ready.clear()
+                if not s.closed:
+                    s.emit({"type": "viewer_disconnected"})
 
     @app.websocket("/v1/sessions/{id}/audio")
     async def audio(ws: WebSocket, id: str):
@@ -434,13 +489,13 @@ def create_app(settings: Settings | None = None):
     async def attach_livekit(id: str, request: Request):
         s = get(id)
         authorize(request, s)
-        if s.pc or s.native_sink:
+        body = await request.json()
+        if s.pc or s.native_sink or s.socket_sink:
             raise HTTPException(409, "Session already has a playback destination")
         try:
             from .livekit import LiveKitSink
         except ImportError as exc:
             raise HTTPException(503, "Install the server LiveKit extra") from exc
-        body = await request.json()
         if not all(
             isinstance(body.get(k), str) and body[k] for k in ("url", "token", "sender_identity")
         ):

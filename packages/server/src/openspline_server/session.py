@@ -36,6 +36,7 @@ class Session:
         self.pc = None
         self.channel = None
         self.native_sink = None
+        self.socket_sink = None
         self.viewer_ready = asyncio.Event()
         self.events = asyncio.Queue(256)
         self.input = asyncio.Queue(8)
@@ -71,6 +72,8 @@ class Session:
         event = {"session_id": self.id, "epoch": self.epoch, **event}
         if not self.events.full():
             self.events.put_nowait(event)
+        if self.socket_sink:
+            self.socket_sink.emit(event)
         if self.channel and self.channel.readyState == "open":
             import json
 
@@ -260,3 +263,5 @@ class Session:
             await self.pc.close()
         if self.native_sink:
             await self.native_sink.close()
+        if self.socket_sink:
+            await self.socket_sink.close()

@@ -173,6 +173,8 @@ For vanilla JS, Vue, or Svelte, call `registerAvatarElement()` from `@openspline
 
 Install the component you need with `npm install @openspline/react` or `npm install @openspline/browser`.
 
+The built-in demo uses WebSocket playback through the server's HTTP port, including SSH port forwarding. For the same transport in your frontend, pass `{...session, transport: "websocket"}`; components otherwise use WebRTC.
+
 ## GPU workers
 
 Edit `~/.local/share/openspline/workers.yaml` ([example](workers.yaml)). Each worker loads weights once and serves one session at a time; device assignments cannot overlap.
@@ -185,7 +187,7 @@ workers:
 
 For high quality, set a worker's quality to `high`, then run `sh ~/.local/share/openspline/run.sh --prepare` to download its model before starting. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. A high-quality worker can reserve multiple GPUs with the server's `distributed` extra. IDs are relative to `CUDA_VISIBLE_DEVICES` when set. For multiple workers, remove `OPENSPLINE_GPU` and `OPENSPLINE_QUALITY` overrides from the installed `.env` and configure devices in `workers.yaml`.
 
-Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, and provider credentials in the installed `.env`. For remote playback, set `OPENSPLINE_PUBLIC_URL`, use HTTPS and reachable WebRTC UDP ports, and configure `ice_servers` for TURN when needed. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
+Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, `OPENSPLINE_PUBLIC_URL`, and provider credentials in the installed `.env`. Use HTTPS for remote microphone access. WebRTC playback additionally needs reachable UDP ports or TURN configured in `ice_servers`. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
 
 <details>
 <summary>Development and validation</summary>

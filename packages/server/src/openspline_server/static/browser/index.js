@@ -1,3 +1,4 @@
+import { SocketPlayback } from './socket.js';
 export class AvatarConnection extends EventTarget {
     session;
     video;
@@ -13,6 +14,7 @@ export class AvatarConnection extends EventTarget {
     stream;
     aborted = false;
     state = 'idle';
+    socketPlayback;
     constructor(session, video) {
         super();
         this.session = session;
@@ -23,6 +25,15 @@ export class AvatarConnection extends EventTarget {
         this.aborted = false;
         this.status('connecting');
         const generation = ++this.generation;
+        if (this.session.transport === 'websocket') {
+            const playback = this.socketPlayback = new SocketPlayback(this.session, this.video);
+            playback.addEventListener('statechange', e => this.status(e.detail));
+            playback.addEventListener('error', e => { this.status('error'); this.dispatchEvent(new CustomEvent('error', { detail: e.detail })); });
+            for (const type of ['autoplayblocked', 'turnend', 'event'])
+                playback.addEventListener(type, e => this.dispatchEvent(new CustomEvent(type, { detail: e.detail })));
+            await playback.connect();
+            return;
+        }
         const ice = await fetch(`${this.session.url}/v1/sessions/${this.session.id}/ice`, { headers: { Authorization: `Bearer ${this.session.token}` } });
         if (!ice.ok)
             throw new Error('Playback credentials expired or session unavailable');
@@ -107,8 +118,9 @@ export class AvatarConnection extends EventTarget {
             throw error;
         }
     }
-    async play() { await this.video.play(); this.lastSamples = -1; if (this.channel?.readyState === 'open')
+    async play() { if (this.socketPlayback)
+        return this.socketPlayback.play(); await this.video.play(); this.lastSamples = -1; if (this.channel?.readyState === 'open')
         this.channel.send(JSON.stringify({ type: 'ready' })); }
-    close() { this.aborted = true; ++this.generation; for (const timer of this.timers)
+    close() { this.aborted = true; ++this.generation; this.socketPlayback?.close(); this.socketPlayback = undefined; for (const timer of this.timers)
         clearTimeout(timer); this.timers.clear(); clearInterval(this.heartbeat); clearInterval(this.statsTimer); this.channel?.close(); this.pc?.close(); this.video.srcObject = null; this.status('disconnected'); }
 }

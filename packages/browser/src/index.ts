@@ -1,12 +1,21 @@
-export interface SessionDescriptor {id:string;url:string;token:string;expires_at?:number;viewer_url?:string}
+import {SocketPlayback} from './socket.js';
+export interface SessionDescriptor {id:string;url:string;token:string;expires_at?:number;viewer_url?:string;transport?:'webrtc'|'websocket'}
 export type AvatarState='idle'|'connecting'|'ready'|'speaking'|'disconnected'|'error';
 export class AvatarConnection extends EventTarget {
   private pc?:RTCPeerConnection;private channel?:RTCDataChannel;private timers=new Set<ReturnType<typeof setTimeout>>();private heartbeat?:ReturnType<typeof setInterval>;private statsTimer?:ReturnType<typeof setInterval>;private generation=0;private epoch=0;private lastSamples=-1;private playoutDelay=150;private stream?:MediaStream;private aborted=false;
   state:AvatarState='idle';
+  private socketPlayback?:SocketPlayback;
   constructor(public session:SessionDescriptor,public video:HTMLVideoElement){super();}
   private status(state:AvatarState){this.state=state;this.dispatchEvent(new CustomEvent('statechange',{detail:state}));}
   async connect(){
     this.aborted=false;this.status('connecting');const generation=++this.generation;
+    if(this.session.transport==='websocket'){
+      const playback=this.socketPlayback=new SocketPlayback(this.session,this.video);
+      playback.addEventListener('statechange',e=>this.status((e as CustomEvent).detail));
+      playback.addEventListener('error',e=>{this.status('error');this.dispatchEvent(new CustomEvent('error',{detail:(e as CustomEvent).detail}));});
+      for(const type of ['autoplayblocked','turnend','event'])playback.addEventListener(type,e=>this.dispatchEvent(new CustomEvent(type,{detail:(e as CustomEvent).detail})));
+      await playback.connect();return;
+    }
     const ice=await fetch(`${this.session.url}/v1/sessions/${this.session.id}/ice`,{headers:{Authorization:`Bearer ${this.session.token}`}});
     if(!ice.ok)throw new Error('Playback credentials expired or session unavailable');
     const config=await ice.json();if(this.aborted||generation!==this.generation)return;
@@ -44,6 +53,6 @@ export class AvatarConnection extends EventTarget {
       await this.play().catch(()=>{this.dispatchEvent(new Event('autoplayblocked'));});
     }catch(error){this.close();this.status('error');throw error;}
   }
-  async play(){await this.video.play();this.lastSamples=-1;if(this.channel?.readyState==='open')this.channel.send(JSON.stringify({type:'ready'}));}
-  close(){this.aborted=true;++this.generation;for(const timer of this.timers)clearTimeout(timer);this.timers.clear();clearInterval(this.heartbeat);clearInterval(this.statsTimer);this.channel?.close();this.pc?.close();this.video.srcObject=null;this.status('disconnected');}
+  async play(){if(this.socketPlayback)return this.socketPlayback.play();await this.video.play();this.lastSamples=-1;if(this.channel?.readyState==='open')this.channel.send(JSON.stringify({type:'ready'}));}
+  close(){this.aborted=true;++this.generation;this.socketPlayback?.close();this.socketPlayback=undefined;for(const timer of this.timers)clearTimeout(timer);this.timers.clear();clearInterval(this.heartbeat);clearInterval(this.statsTimer);this.channel?.close();this.pc?.close();this.video.srcObject=null;this.status('disconnected');}
 }
