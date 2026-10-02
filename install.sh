@@ -22,6 +22,12 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -q '"nvidia"'; then
+  echo "openspline: Docker cannot find the NVIDIA container runtime" >&2
+  echo "Install NVIDIA Container Toolkit and configure Docker before continuing" >&2
+  exit 1
+fi
+
 if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "openspline: an NVIDIA GPU and NVIDIA Container Toolkit are required" >&2
   exit 1

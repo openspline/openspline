@@ -8,11 +8,13 @@ services:
     depends_on:
       models:
         condition: service_completed_successfully
-    gpus: all
+    runtime: nvidia
     network_mode: host
     env_file: .env
     environment:
       OPENSPLINE_PUBLIC_URL: ${OPENSPLINE_PUBLIC_URL:-http://localhost:7860}
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     volumes:
       - models:/models
       - runtime:/runtime
