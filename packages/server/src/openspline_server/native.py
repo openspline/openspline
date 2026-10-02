@@ -65,6 +65,10 @@ def prepare(settings):
             "Native model download requires sibling model directories named avatar and audio"
         )
     qualities = {w.quality for w in settings.workers}
+    if len(settings.workers) == 1 and len(settings.workers[0].devices) == 1:
+        # Cache every quality offered by the demo before launching it.
+        qualities = {"low", "high"}
+    print(f"Downloading models before startup: {', '.join(sorted(qualities))}.", flush=True)
     download(
         SimpleNamespace(
             directory=str(avatar.parent),
@@ -81,7 +85,9 @@ def main():
     parser.add_argument("--host", default=os.getenv("OPENSPLINE_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=os.getenv("OPENSPLINE_PORT", "7860"))
     parser.add_argument(
-        "--prepare", action="store_true", help="Download models for the configured workers"
+        "--prepare",
+        action="store_true",
+        help="Download models before startup (both qualities for the single-GPU demo)",
     )
     parser.add_argument(
         "--save-selection",

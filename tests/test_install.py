@@ -14,7 +14,10 @@ import pytest
 @pytest.mark.parametrize("no_start", [False, True])
 @pytest.mark.parametrize("cuda", ["cu126", "cu128"])
 @pytest.mark.parametrize("check_fails", [False, True])
-def test_archive_install_preserves_config_and_launches_native(tmp_path, no_start, cuda, check_fails):
+@pytest.mark.parametrize("download_fails", [False, True])
+def test_archive_install_preserves_config_and_launches_native(
+    tmp_path, no_start, cuda, check_fails, download_fails
+):
     repo = Path(__file__).resolve().parents[1]
     source = tmp_path / "release"
     for file in (
@@ -43,6 +46,7 @@ def test_archive_install_preserves_config_and_launches_native(tmp_path, no_start
     stub = f"#!{sys.executable}\nimport os, json, sys\nwith open(os.environ['INSTALL_TEST_LOG'], 'a') as f: f.write(json.dumps(sys.argv) + '\\n')\n"
     stub += f"if sys.argv[-1] == 'openspline_server.hardware': print({cuda!r})\n"
     stub += f"if sys.argv[-2:] == ['openspline_server.hardware', '--check'] and {check_fails}: sys.exit(1)\n"
+    stub += f"if '--prepare' in sys.argv and {download_fails}: sys.exit(1)\n"
     for tool in (install / ".tools/uv", install / ".venv/bin/python", bin_dir / "nvidia-smi"):
         tool.write_text(stub)
         tool.chmod(0o755)
@@ -60,7 +64,16 @@ def test_archive_install_preserves_config_and_launches_native(tmp_path, no_start
     )
     if check_fails:
         assert result.returncode != 0
-        assert '--prepare' not in log.read_text()
+        assert "--prepare" not in log.read_text()
+        return
+    if download_fails:
+        assert result.returncode != 0
+        launches = [
+            json.loads(line)
+            for line in log.read_text().splitlines()
+            if "openspline_server.native" in line
+        ]
+        assert len(launches) == 1 and "--prepare" in launches[0]
         return
     assert result.returncode == 0, result.stderr
     assert (install / ".env").read_text() == "OPENAI_API_KEY=keep-existing\n"

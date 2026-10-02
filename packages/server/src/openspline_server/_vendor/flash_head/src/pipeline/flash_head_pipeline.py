@@ -108,7 +108,7 @@ class FlashHeadPipeline:
             elif self.model_type == "pro":
                 model_dir = os.path.join(checkpoint_dir, "Model_Pro")
         
-        self.model = WanModelAudioProject.from_pretrained(model_dir)
+        self.model = WanModelAudioProject.from_pretrained(model_dir, local_files_only=True)
         self.model.eval().requires_grad_(False)
         self.model.to(device=self.device, dtype=self.param_dtype)
 

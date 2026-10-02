@@ -9,6 +9,7 @@ import os
 import signal
 import socket
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -218,13 +219,20 @@ class Worker:
         self.process.start()
         child.close()
         self.conn = parent
+        receive = asyncio.create_task(
+            asyncio.to_thread(self._receive, self.settings.startup_timeout)
+        )
         try:
-            kind, value = await asyncio.to_thread(self._receive, self.settings.startup_timeout)
+            kind, value = await asyncio.shield(receive)
             if kind != "ready":
                 raise WorkerFailure(value)
             self.info = value
             self.ready = True
             self.error = None
+        except asyncio.CancelledError:
+            await self.stop()
+            await asyncio.gather(receive, return_exceptions=True)
+            raise
         except Exception as exc:
             self.error = str(exc)
             await self.stop()
@@ -323,6 +331,63 @@ class WorkerPool:
                     w.owner = owner
                     return w
             raise CapacityError("All workers for this quality are occupied or unavailable")
+
+    async def reserve_quality_switch(self, quality, owner):
+        """Reserve the default single-GPU worker; never displace an active session."""
+        if not isinstance(quality, str) or quality not in {"low", "high"}:
+            raise ValueError("quality must be low or high")
+        async with self.lock:
+            for worker in self.workers:
+                if worker.config.quality == quality and worker.ready and worker.owner is None:
+                    return None
+            if len(self.workers) != 1 or len(self.workers[0].config.devices) != 1:
+                if any(w.config.quality == quality for w in self.workers):
+                    raise CapacityError("All workers for this quality are occupied or unavailable")
+                raise ValueError("Configure a worker for this quality in a multi-worker deployment")
+            worker = self.workers[0]
+            if worker.owner is not None or getattr(worker, "recovering", None):
+                raise CapacityError(
+                    "GPU is busy. End its current session before switching quality."
+                )
+            worker.owner = owner
+            return worker
+
+    async def switch_quality(self, worker, quality, owner, progress):
+        from .quality import prepare_quality
+
+        previous = worker.config
+        unloaded = False
+        try:
+            progress("checking")
+            await prepare_quality(self.settings, quality)
+            progress("unloading")
+            unloaded = True
+            await worker.stop()
+            worker.config = replace(previous, quality=quality)
+            progress("loading")
+            await worker.start()
+            if not worker.ready:
+                raise WorkerFailure(worker.error or "Model could not load")
+        except asyncio.CancelledError:
+            await worker.stop()
+            worker.config = previous
+            raise
+        except Exception as exc:
+            if unloaded:
+                progress("restoring")
+                await worker.stop()
+                worker.config = previous
+                await worker.start()
+            recovery = (
+                f" {previous.quality.capitalize()} quality is still available."
+                if worker.ready
+                else " The worker is unavailable; check the server logs."
+            )
+            raise WorkerFailure(f"Could not prepare {quality} quality: {exc}.{recovery}") from exc
+        finally:
+            async with self.lock:
+                if worker.owner == owner:
+                    worker.owner = None
 
     async def release(self, worker, owner):
         if worker.owner != owner:

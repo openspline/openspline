@@ -1,22 +1,26 @@
 import{registerAvatarElement}from'./browser/element.js';registerAvatarElement();
 import{waitForPlayback}from'./playback-ready.js';
+import{prepareDemoQuality}from'./demo-quality.js';
 const $=id=>document.getElementById(id);let session,ws,media,context,worklet,previewURL,playbackAbort,stopping,playbackError;
-fetch('/readyz').then(r=>r.json()).then(data=>{$('health').textContent=data.backend==='test'?'Test backend · static portrait':data.workers.some(w=>w.ready)?'GPU ready':'Worker unavailable';}).catch(()=>{$('health').textContent='Service unavailable';});
+fetch('/readyz').then(r=>r.json()).then(data=>{$('health').textContent=data.backend==='test'?'Test backend · static portrait':data.workers.some(w=>w.ready)?'GPU ready':'Worker unavailable';const qualities=data.demo_qualities??data.workers.map(w=>w.quality);for(const option of $('quality').options)option.disabled=!qualities.includes(option.value);if(!qualities.includes($('quality').value))$('quality').value=qualities[0]??'low';}).catch(()=>{$('health').textContent='Service unavailable';});
 $('portrait').onchange=()=>{const file=$('portrait').files[0];if(!file)return;if(previewURL)URL.revokeObjectURL(previewURL);previewURL=URL.createObjectURL(file);$('portrait-preview').src=previewURL;$('portrait-preview').hidden=false;$('empty').hidden=true;};
 $('source').onchange=()=>{$('audio-label').hidden=$('source').value!=='file';};
 async function request(path,init={}){const r=await fetch(path,init);if(!r.ok)throw new Error((await r.json()).error?.message??r.statusText);return r.status===204?null:r.json();}
 let sequence=0;const pending=new Map();function send(type,body={}){const id=String(++sequence);return new Promise((resolve,reject)=>{pending.set(id,{resolve,reject});ws.send(JSON.stringify({type,id,...body}));});}
 function connect(path,token){return new Promise((resolve,reject)=>{ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}${path}`);ws.onopen=()=>ws.send(JSON.stringify({token}));ws.onerror=()=>reject(new Error('Connection failed'));ws.onclose=()=>{const error=new Error('Connection closed');reject(error);for(const p of pending.values())p.reject(error);pending.clear();};ws.onmessage=({data})=>{const e=JSON.parse(data);if(e.type==='ready')resolve();if(e.type==='error'){reject(new Error(e.message));const p=pending.get(e.id);if(p){p.reject(new Error(e.message));pending.delete(e.id);}$('status').textContent=e.message;}else if(pending.has(e.id)){pending.get(e.id).resolve(e);pending.delete(e.id);}};});}
-$('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('status').textContent='Preparing your avatar…';try{
+$('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('quality').disabled=true;$('status').textContent='Preparing your avatar…';try{
  if(session)await stop(false);
  playbackError=null;
- const source=$('source').value,file=$('audio').files[0];
+ const source=$('source').value,file=$('audio').files[0],quality=$('quality').value;
  if(source==='file'&&!file)throw new Error('Choose an audio file.');
- const form=new FormData();form.set('portrait',$('portrait').files[0]);form.set('quality',$('quality').value);
+ const form=new FormData();form.set('portrait',$('portrait').files[0]);form.set('quality',quality);
+ await prepareDemoQuality(request,quality,message=>{$('status').textContent=message;});
+ $('status').textContent='Preparing your avatar…';
  session=await request('/v1/sessions',{method:'POST',body:form});
  $('status').textContent='Connecting playback…';playbackAbort=new AbortController();
  const playbackReady=waitForPlayback($('avatar'),{signal:playbackAbort.signal,onBlocked:()=>{$('status').textContent='Click Enable playback on the avatar to continue.';}});playbackReady.catch(()=>{});
- $('avatar').addEventListener('avatarerror',e=>{playbackError=e.detail instanceof Error?e.detail:new Error(String(e.detail));$('status').textContent=playbackError.message;void stop(false);},{once:true});
+ const activeAvatar=$('avatar'),activeSession=session;
+ activeAvatar.addEventListener('avatarerror',e=>{if(session!==activeSession||$('avatar')!==activeAvatar)return;playbackError=e.detail instanceof Error?e.detail:new Error(String(e.detail));$('status').textContent=playbackError.message;void stop(false);},{once:true});
  $('avatar').session={id:session.id,url:location.origin,token:session.token,transport:'websocket'};$('avatar').hidden=false;$('empty').hidden=true;$('portrait-preview').hidden=true;$('stop').hidden=false;
  await connect(`/v1/sessions/${session.id}/${source==='file'?'audio':'demo/'+source}`,session.publisher_token);
  await playbackReady;
@@ -25,7 +29,7 @@ $('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('sta
  }else{
    media=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});context=new AudioContext({sampleRate:24000});await context.audioWorklet.addModule('/static/microphone.js');worklet=new AudioWorkletNode(context,'pcm-capture');context.createMediaStreamSource(media).connect(worklet);worklet.port.onmessage=({data})=>{if(ws?.readyState===WebSocket.OPEN&&ws.bufferedAmount<100000)ws.send(data);};worklet.connect(context.destination);$('status').textContent='Connected. Speak naturally; interrupt at any time.';
  }
-}catch(error){$('status').textContent=(playbackError??error).message;await stop(false);}finally{$('start').disabled=false;}};
+}catch(error){$('status').textContent=(playbackError??error).message;await stop(false);}finally{$('start').disabled=false;$('quality').disabled=false;}};
 async function stop(message=true){
  if(stopping)return stopping;
  stopping=(async()=>{

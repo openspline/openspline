@@ -41,6 +41,8 @@ def create_app(settings: Settings | None = None):
     settings = settings or Settings()
     pool = WorkerPool(settings)
     sessions = {}
+    quality_jobs = {}
+    quality_tasks = set()
 
     async def remove(id):
         s = sessions.pop(id, None)
@@ -72,6 +74,9 @@ def create_app(settings: Settings | None = None):
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
+        for task in quality_tasks:
+            task.cancel()
+        await asyncio.gather(*quality_tasks, return_exceptions=True)
         await asyncio.gather(*(remove(id) for id in list(sessions)))
         await pool.close()
 
@@ -113,6 +118,49 @@ def create_app(settings: Settings | None = None):
     async def health():
         return {"status": "ok"}
 
+    @app.post("/v1/demo/quality")
+    async def prepare_demo_quality(request: Request):
+        body = await request.json()
+        quality = body.get("quality") if isinstance(body, dict) else None
+        id = secrets.token_hex(16)
+        owner = f"quality-switch:{id}"
+        try:
+            worker = await pool.reserve_quality_switch(quality, owner)
+        except ValueError as exc:
+            raise HTTPException(422, {"code": "configuration", "message": str(exc)}) from exc
+        except CapacityError as exc:
+            raise HTTPException(429, {"code": "capacity", "message": str(exc)}) from exc
+        if worker is None:
+            return {"id": None, "quality": quality, "state": "ready"}
+        job = {"id": id, "quality": quality, "state": "checking", "error": None}
+        # A single worker permits only one pending switch; retain recent completed jobs.
+        while len(quality_jobs) >= 16:
+            quality_jobs.pop(next(iter(quality_jobs)))
+        quality_jobs[id] = job
+
+        async def prepare():
+            try:
+                await pool.switch_quality(
+                    worker, quality, owner, lambda state: job.update(state=state)
+                )
+                job["state"] = "ready"
+            except asyncio.CancelledError:
+                job.update(state="error", error="Service is shutting down")
+                raise
+            except Exception as exc:
+                job.update(state="error", error=str(exc))
+
+        task = asyncio.create_task(prepare())
+        quality_tasks.add(task)
+        task.add_done_callback(quality_tasks.discard)
+        return JSONResponse(job.copy(), status_code=202, headers={"Cache-Control": "no-store"})
+
+    @app.get("/v1/demo/quality/{id}")
+    async def demo_quality_status(id: str):
+        if id not in quality_jobs:
+            raise HTTPException(404, "Unknown quality preparation")
+        return JSONResponse(quality_jobs[id].copy(), headers={"Cache-Control": "no-store"})
+
     @app.get("/readyz")
     async def ready():
         workers = [
@@ -125,7 +173,13 @@ def create_app(settings: Settings | None = None):
             for w in pool.workers
         ]
         return JSONResponse(
-            {"workers": workers, "backend": settings.backend},
+            {
+                "workers": workers,
+                "backend": settings.backend,
+                "demo_qualities": ["low", "high"]
+                if len(pool.workers) == 1 and len(pool.workers[0].config.devices) == 1
+                else sorted({w.config.quality for w in pool.workers}),
+            },
             status_code=200 if any(w.ready for w in pool.workers) else 503,
         )
 

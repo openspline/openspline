@@ -67,6 +67,17 @@ def test_single_gpu_override_cannot_collapse_multiple_workers(tmp_path, monkeypa
         )
 
 
+@pytest.mark.parametrize("quality", ["low", "high"])
+def test_single_gpu_downloads_both_demo_profiles_before_launch(tmp_path, monkeypatch, quality):
+    path = workers(tmp_path, f"workers: [{{id: main, quality: {quality}, devices: [0]}}]\n")
+    environment(tmp_path)
+    downloads = []
+    monkeypatch.setattr("openspline_server.cli.download", downloads.append)
+    prepare(configure(path))
+    assert downloads[0].quality == "all"
+    assert downloads[0].directory == str(tmp_path / "models")
+
+
 def test_mixed_workers_download_both_profiles(tmp_path, monkeypatch):
     path = workers(
         tmp_path,
