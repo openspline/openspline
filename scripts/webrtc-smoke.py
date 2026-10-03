@@ -45,6 +45,22 @@ async def run(args):
         task = asyncio.create_task(output())
         await avatar.wait_for_viewer()
         try:
+
+            async def check_idle():
+                before = result["video_frames"]
+                await asyncio.sleep(1.5)
+                assert result["video_frames"] > before
+                response = await avatar.http.get("/metrics")
+                metric = f'openspline_idle_blocks{{session="{avatar.id}"}} '
+                blocks = next(
+                    float(line[len(metric) :])
+                    for line in response.text.splitlines()
+                    if line.startswith(metric)
+                )
+                assert blocks > 0
+                return blocks
+
+            result["initial_idle_blocks"] = await check_idle()
             deadline = time.monotonic() + args.seconds
             turn = 0
             while time.monotonic() < deadline:
@@ -63,6 +79,10 @@ async def run(args):
                     await avatar.end_turn()
                 turn += 1
             result["turns"] = turn
+            await avatar.interrupt()
+            result["interruptions"] += 1
+            result["idle_blocks_after_interrupt"] = await check_idle()
+            assert result["idle_blocks_after_interrupt"] > result["initial_idle_blocks"]
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)

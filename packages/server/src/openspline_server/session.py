@@ -48,9 +48,14 @@ class Session:
         self.model_pending = np.empty(0, dtype=np.float32)
         self.timeline = Timeline(np.asarray(Image.open(image).convert("RGB").resize((512, 512))))
         self.task = None
-        self.needs_prepare = False
         self.close_lock = asyncio.Lock()
-        self.metrics = {"blocks": 0, "inference_seconds": 0.0, "audio_seconds": 0.0}
+        self.metrics = {
+            "blocks": 0,
+            "inference_seconds": 0.0,
+            "audio_seconds": 0.0,
+            "idle_blocks": 0,
+            "idle_inference_seconds": 0.0,
+        }
 
     async def start(self):
         await self.worker.call("prepare", str(self.image), 0)
@@ -140,7 +145,8 @@ class Session:
         self.model_pending = np.empty(0, dtype=np.float32)
         self.history.fill(0)
         self.downsampler = av.AudioResampler(format="flt", layout="mono", rate=16000)
-        self.needs_prepare = True
+        # Retain motion conditioning within this session. Resetting to the portrait
+        # here causes a visible jump whenever the user interrupts.
         self.emit({"type": "interrupted"})
 
     def _downsample(self, audio):
@@ -182,9 +188,6 @@ class Session:
             self.model_pending = self.model_pending[chunk:]
             model = np.pad(model, (0, max(0, chunk - len(model))))
             self.history = np.concatenate([self.history, model])[-len(self.history) :]
-            if self.needs_prepare:
-                await self.worker.call("prepare", str(self.image), 0)
-                self.needs_prepare = False
             frames, elapsed = await self.worker.call("infer", self.history.copy())
             if epoch != self.epoch:
                 return
@@ -200,11 +203,35 @@ class Session:
                 }
             )
 
+    async def _idle(self):
+        timeline = self.timeline
+        if not self.viewer_ready.is_set() or not self.input.empty() or timeline.idle_next is not None:
+            return
+        epoch = self.epoch
+        chunk = self.worker.info["chunk_samples"]
+        self.history = np.concatenate([self.history, np.zeros(chunk, dtype=np.float32)])[
+            -len(self.history) :
+        ]
+        frames, elapsed = await self.worker.call("infer", self.history.copy())
+        if epoch != self.epoch or self.closed:
+            return
+        self.metrics["idle_blocks"] += 1
+        self.metrics["idle_inference_seconds"] += elapsed
+        timeline.put_idle(frames, self.worker.info["fps"], epoch)
+
     async def _consume(self):
         try:
             while not self.closed:
-                item = await self.input.get()
+                # Use one inference loop for speech and silence: never overlap GPU
+                # calls, and always consume queued speech before generating more idle.
+                try:
+                    item = await asyncio.wait_for(self.input.get(), 0.04)
+                except asyncio.TimeoutError:
+                    await self._idle()
+                    continue
                 if item.epoch != self.epoch:
+                    if item.future and not item.future.done():
+                        item.future.set_exception(RuntimeError("Turn interrupted"))
                     continue
                 try:
                     if item.kind == "audio":

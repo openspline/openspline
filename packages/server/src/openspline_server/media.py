@@ -33,12 +33,37 @@ class Timeline:
         self.played = 0
         self.changed = asyncio.Event()
         self.origin = None
+        self.idle_current = None
+        self.idle_next = None
+        self.idle_offset = 0
+
+    def clear_idle(self):
+        self.idle_current = self.idle_next = None
+        self.idle_offset = 0
+
+    def put_idle(self, frames, fps, epoch):
+        if epoch == self.epoch:
+            self.idle_next = (frames, fps)
+
+    def advance_idle(self, samples):
+        if self.idle_current is None:
+            if self.idle_next is None:
+                return False
+            self.idle_current, self.idle_next = self.idle_next, None
+            self.idle_offset = 0
+        frames, fps = self.idle_current
+        self.frame = frames[min(len(frames) - 1, self.idle_offset * fps // 48000)]
+        self.idle_offset += samples
+        if self.idle_offset * fps >= len(frames) * 48000:
+            self.idle_current = None
+        return True
 
     async def put(self, segment):
         await self.slots.acquire()
         if segment.epoch != self.epoch:
             self.slots.release()
             return
+        self.clear_idle()
         self.queue.append(segment)
         self.submitted += len(segment.audio)
 
@@ -49,7 +74,8 @@ class Timeline:
             self.slots.release()
         self.current = None
         self.offset = 0
-        self.frame = self.portrait
+        # Keep the last displayed pose until new idle or speech frames arrive.
+        self.clear_idle()
         self.submitted = self.sent = self.played = 0
         self.changed.set()
 
@@ -59,7 +85,8 @@ class Timeline:
         while written < n:
             if self.current is None:
                 if not self.queue:
-                    self.frame = self.portrait
+                    if not written:
+                        self.advance_idle(n)
                     break
                 self.current = self.queue.popleft()
                 self.slots.release()

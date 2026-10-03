@@ -48,6 +48,8 @@ async with client.avatar("portrait.jpg", quality="low") as avatar:
 
 `stream()` accepts generated PCM audio and returns after playback finishes. WAV and MP3 files are also supported.
 
+Avatars keep generating idle motion while listening and after interruptions. The GPU stays active until the session ends; speech takes priority over idle generation.
+
 
 ## Connectors
 

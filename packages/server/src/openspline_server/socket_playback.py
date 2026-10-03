@@ -4,6 +4,7 @@ import asyncio
 import base64
 import contextlib
 import io
+import time
 
 from PIL import Image
 from starlette.websockets import WebSocketDisconnect
@@ -23,6 +24,13 @@ class SocketPlayback:
         self.websocket = websocket
         self.events = asyncio.Queue(64)
         self.closed = False
+        self.idle_sent = self.idle_played = 0
+        self.idle_epoch = session.epoch
+        self.next_idle_at = 0.0
+
+    def acknowledge_idle(self, sequence, epoch):
+        if epoch == self.idle_epoch and type(sequence) is int:
+            self.idle_played = max(self.idle_played, min(sequence, self.idle_sent))
 
     def emit(self, event):
         # Control messages cannot be silently lost (especially interruption).
@@ -38,6 +46,9 @@ class SocketPlayback:
             while not self.events.empty():
                 await self.websocket.send_json(self.events.get_nowait())
             timeline = s.timeline
+            if self.idle_epoch != s.epoch:
+                self.idle_epoch = s.epoch
+                self.idle_sent = self.idle_played = 0
             # Feedback arrives after playback + output latency + network RTT.
             # A 200ms window starves even realtime generation over ordinary WANs.
             # Keep at most one second outstanding; paused viewers still backpressure.
@@ -63,6 +74,22 @@ class SocketPlayback:
                         ).decode("ascii"),
                         "image": frame,
                     }
+                )
+            elif (
+                s.viewer_ready.is_set()
+                and timeline.played >= timeline.submitted
+                and self.idle_sent - self.idle_played < 25
+                and time.monotonic() >= self.next_idle_at
+                and timeline.advance_idle(1920)
+            ):
+                epoch = s.epoch
+                frame = await asyncio.to_thread(jpeg, timeline.frame.copy())
+                if epoch != s.epoch:
+                    continue
+                self.idle_sent += 1
+                self.next_idle_at = time.monotonic() + 0.04
+                await self.websocket.send_json(
+                    {"type": "idle", "epoch": epoch, "sequence": self.idle_sent, "image": frame}
                 )
             else:
                 await asyncio.sleep(0.01)

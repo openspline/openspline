@@ -63,6 +63,18 @@ export class SocketPlayback extends EventTarget {
       // Autoplay may require a click. Never mark playback ready before permission.
       if(this.context.state==='suspended')this.event('autoplayblocked');
       else await this.play().catch(()=>this.event('autoplayblocked'));
+    } else if(event.type==='idle') {
+      if(event.epoch!==this.epoch||this.context?.state!=='running')return;
+      const bytes=Uint8Array.from(atob(event.image),(c)=>c.charCodeAt(0));
+      const image=await createImageBitmap(new Blob([bytes],{type:'image/jpeg'}));
+      if(!this.closed&&event.epoch===this.epoch){
+        if(!this.frames.length&&!this.acknowledgments.length){
+          this.canvas.getContext('2d')!.drawImage(image,0,0,512,512);
+          if(!this.idle){this.idle=true;this.event('statechange','ready');}
+        }
+        this.send({type:'idle_played',sequence:event.sequence,epoch:event.epoch});
+      }
+      image.close();
     } else if(event.type==='media') {
       if(event.epoch!==this.epoch)return;
       const bytes=Uint8Array.from(atob(event.audio),(c)=>c.charCodeAt(0));
@@ -104,7 +116,7 @@ export class SocketPlayback extends EventTarget {
     while(this.acknowledgments.length&&this.acknowledgments[0].at<=context.currentTime){
       const {samples,epoch}=this.acknowledgments.shift()!;this.send({type:'played',samples,epoch});
     }
-    if(!this.idle&&!this.frames.length&&!this.acknowledgments.length&&this.portrait){this.canvas.getContext('2d')!.drawImage(this.portrait,0,0,512,512);this.idle=true;}
+    if(!this.idle&&!this.frames.length&&!this.acknowledgments.length){this.idle=true;this.event('statechange','ready');}
   }
   async play() {
     if(!this.initialized||this.closed)return;
@@ -117,7 +129,7 @@ export class SocketPlayback extends EventTarget {
     for(const frame of this.frames)frame.image.close();this.frames=[];
     this.acknowledgments=[];this.end=0;
     this.lastSamples=0;this.turnEnds.clear();
-    if(this.portrait)this.canvas.getContext('2d')!.drawImage(this.portrait,0,0,512,512);
+    this.idle=true;
   }
   close() {
     if(this.closed)return;this.closed=true;

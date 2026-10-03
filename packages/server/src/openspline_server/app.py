@@ -399,12 +399,17 @@ def create_app(settings: Settings | None = None):
                 s.touch()
                 if event.get("type") == "ready":
                     s.viewer_ready.set()
+                    # Resuming a suspended AudioContext may have discarded idle
+                    # pictures without acknowledgments; reopen its bounded window.
+                    sink.acknowledge_idle(sink.idle_sent, s.epoch)
                     sink.emit({"type": "playback_ready", "epoch": s.epoch})
                     s.emit({"type": "viewer_ready"})
                 elif event.get("type") == "played":
                     samples = event.get("samples")
                     if type(samples) is int and samples >= 0:
                         s.playback(samples, event.get("epoch"))
+                elif event.get("type") == "idle_played":
+                    sink.acknowledge_idle(event.get("sequence"), event.get("epoch"))
                 elif event.get("type") == "playback_stats" and event.get("epoch") == s.epoch:
                     buffer_ms, underruns = event.get("buffer_ms"), event.get("underruns")
                     if type(buffer_ms) is int and type(underruns) is int:
