@@ -1861,6 +1861,7 @@ dependencies = [
     { name = "pillow" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "rich" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1913,6 +1914,7 @@ requires-dist = [
     { name = "pyloudnorm", marker = "extra == 'gpu'", specifier = "==0.1.1" },
     { name = "python-multipart", specifier = ">=0.0.20,<1" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "rich", specifier = ">=15,<16" },
     { name = "safetensors", marker = "extra == 'gpu'", specifier = ">=0.6,<1" },
     { name = "scipy", marker = "extra == 'gpu'", specifier = ">=1.14,<2" },
     { name = "torch", marker = "extra == 'gpu'", specifier = "==2.7.1" },

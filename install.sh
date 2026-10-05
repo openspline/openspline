@@ -93,8 +93,6 @@ echo "Installing PyTorch for $cuda..."
 "$python" -m openspline_server.hardware --check
 
 sh "$install_dir/run.sh" --prepare --save-selection
-echo "Installed in $install_dir. Restart with: sh \"$install_dir/run.sh\""
+"$python" -m openspline_server.install_message "$install_dir"
 cleanup
 trap - EXIT HUP INT TERM
-if [ "${OPENSPLINE_NO_START:-0}" = 1 ]; then exit 0; fi
-exec sh "$install_dir/run.sh"

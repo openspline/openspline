@@ -56,6 +56,7 @@ class Session:
             "idle_blocks": 0,
             "idle_inference_seconds": 0.0,
         }
+        self.idle_generated_since_speech = 0
 
     async def start(self):
         await self.worker.call("prepare", str(self.image), 0)
@@ -145,6 +146,7 @@ class Session:
         self.model_pending = np.empty(0, dtype=np.float32)
         self.history.fill(0)
         self.downsampler = av.AudioResampler(format="flt", layout="mono", rate=16000)
+        self.idle_generated_since_speech = 0
         # Retain motion conditioning within this session. Resetting to the portrait
         # here causes a visible jump whenever the user interrupts.
         self.emit({"type": "interrupted"})
@@ -195,6 +197,7 @@ class Session:
             self.metrics["inference_seconds"] += elapsed
             self.metrics["audio_seconds"] += valid / 48000
             await self.timeline.put(Segment(pcm, frames, self.worker.info["fps"], epoch))
+            self.idle_generated_since_speech = 0
             self.emit(
                 {
                     "type": "speaking",
@@ -205,7 +208,12 @@ class Session:
 
     async def _idle(self):
         timeline = self.timeline
-        if not self.viewer_ready.is_set() or not self.input.empty() or timeline.idle_next is not None:
+        if (
+            not self.viewer_ready.is_set()
+            or not self.input.empty()
+            or timeline.idle_next is not None
+            or self.idle_generated_since_speech >= 2
+        ):
             return
         epoch = self.epoch
         chunk = self.worker.info["chunk_samples"]
@@ -217,6 +225,7 @@ class Session:
             return
         self.metrics["idle_blocks"] += 1
         self.metrics["idle_inference_seconds"] += elapsed
+        self.idle_generated_since_speech += 1
         timeline.put_idle(frames, self.worker.info["fps"], epoch)
 
     async def _consume(self):

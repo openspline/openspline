@@ -6,8 +6,8 @@ name = "openspline-server"
 version = "0.1.0"
 description = "Self-hosted GPU runtime for openspline"
 requires-python = ">=3.10,<3.13"
-license = "Apache-2.0"
-dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1", "python-multipart>=0.0.20,<1", "numpy>=1.26,<3", "Pillow>=11,<13", "PyYAML>=6,<7", "aiortc>=1.14,<2", "av>=14,<17", "huggingface-hub>=0.34,<1"]
+license = "MIT"
+dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1", "python-multipart>=0.0.20,<1", "numpy>=1.26,<3", "Pillow>=11,<13", "PyYAML>=6,<7", "aiortc>=1.14,<2", "av>=14,<17", "huggingface-hub>=0.34,<1", "rich>=15,<16"]
 [project.optional-dependencies]
 livekit = ["livekit-agents==1.8.3", "livekit-api==1.2.1"]
 demo = ["openai==2.54.0", "google-genai==1.75.0"]

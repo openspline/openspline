@@ -1,5 +1,10 @@
 # openspline
 
+[![MIT license](https://img.shields.io/badge/license-MIT-2EA44F?style=flat-square)](LICENSE)
+[![Python 3.10 to 3.12](https://img.shields.io/badge/python-3.10%20to%203.12-3776AB?style=flat-square&logo=python&logoColor=white)](#python-sdk)
+[![Node.js 20+](https://img.shields.io/badge/node.js-20%2B-339933?style=flat-square&logo=nodedotjs&logoColor=white)](#node-sdk)
+[![NVIDIA GPU](https://img.shields.io/badge/GPU-NVIDIA-76B900?style=flat-square&logo=nvidia&logoColor=white)](#gpu-workers)
+
 **Add a live face to any voice AI agent in five lines.** Turn a portrait and generated audio into synchronized video and speech on your own GPU.
 
 - **Bring your agent.** Keep your prompts, tools, microphone, and voice provider.
@@ -7,36 +12,50 @@
 - **Ready to display.** Built-in viewer, React component, and web component.
 - **Self-hosted.** One active session per GPU worker; add GPUs for concurrency.
 
-- [openspline](#openspline)
-  - [Quick start](#quick-start)
-  - [Connectors](#connectors)
-    - [OpenAI Realtime](#openai-realtime)
-    - [LiveKit](#livekit)
-    - [Gemini Realtime](#gemini-realtime)
-    - [Custom connector](#custom-connector)
-  - [Configuration](#configuration)
-  - [Node](#node)
-  - [Frontend](#frontend)
-  - [GPU workers](#gpu-workers)
-  - [License](#license)
+[Quick start](#quick-start) · [Connectors](#connectors) · [Configuration](#configuration) · [Node SDK](#node-sdk) · [Frontend](#frontend) · [GPU workers](#gpu-workers)
+
 ## Quick start
 
-On a Linux x86_64 server with an NVIDIA GPU and working NVIDIA driver:
+### Install the GPU service
+
+On a Linux x86_64 server with an NVIDIA GPU and working driver, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | sh
-pip install openspline
-# or, for Node.js
-npm install @openspline/node
 ```
 
-The installer creates a private Python environment, downloads models, and runs the service in your terminal. It defaults to GPU 0; select another with `curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh`. No sudo is needed. Press Ctrl-C to stop; restart with `sh ~/.local/share/openspline/run.sh`.
+The installer creates a private Python environment and downloads the Low and High models. It does not start the service or need `sudo`. It uses GPU 0 by default. To choose another GPU:
 
-The installer downloads both Low and High models before launching the demo. Select either quality and start playback; switching loads the selected model from disk, with no downloads during use. Only one model and session run at a time.
+```bash
+curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh
+```
 
-PyTorch's CUDA build is selected automatically: CUDA 12.8 for Blackwell (including RTX 50-series), and CUDA 12.6 for older NVIDIA GPUs. Pre-Ampere cards use FP32, which needs more VRAM and may be slower. A compatible NVIDIA driver and enough VRAM are required; AMD and Apple GPUs are not supported by this backend. Blackwell and pre-Ampere inference still need hardware validation.
+### Launch the demo
 
-Python usage:
+```bash
+sh ~/.local/share/openspline/run.sh
+```
+
+Open [http://localhost:7860](http://localhost:7860), add a portrait, choose **Audio file**, and start playback. Press Ctrl-C in the server terminal to stop the demo. You can switch between Low and High quality without downloading models again. The default single worker serves one model and session at a time.
+
+To try realtime conversation, edit `~/.local/share/openspline/.env` and set either or both provider keys:
+
+```dotenv
+OPENAI_API_KEY=your_openai_key
+GEMINI_API_KEY=your_gemini_key
+```
+
+Then launch or restart the demo and select **OpenAI Realtime** or **Gemini Live** as the audio source. Neither key is needed for Audio file mode.
+
+### Python SDK
+
+Install the client package where your agent runs:
+
+```bash
+pip install openspline
+```
+
+Stream generated audio to a portrait:
 
 ```python
 from openspline import Openspline
@@ -50,6 +69,7 @@ async with client.avatar("portrait.jpg", quality="low") as avatar:
 
 Avatars keep generating idle motion while listening and after interruptions. The GPU stays active until the session ends; speech takes priority over idle generation.
 
+**GPU compatibility:** PyTorch uses CUDA 12.8 for Blackwell (including RTX 50-series) and CUDA 12.6 for older NVIDIA GPUs. Pre-Ampere cards use FP32, which needs more VRAM and may be slower. AMD and Apple GPUs are not supported by this backend. Blackwell and pre-Ampere inference still need hardware validation.
 
 ## Connectors
 
@@ -69,7 +89,7 @@ async with Openspline().avatar("portrait.jpg") as avatar:
     adapter = OpenAIRealtime(avatar, connection)
     try:
         async for event in adapter.wrap(connection):
-            await handle_event(event) # your existing handler
+            await handle_event(event)  # your existing handler
     finally:
         adapter.close()
 ```
@@ -103,7 +123,7 @@ async with Openspline().avatar("portrait.jpg") as avatar:
     print(avatar.viewer_url)
     await avatar.wait_for_viewer()
     async for event in GeminiLive(avatar).wrap(live_session.receive()):
-        await handle_event(event) # your existing handler
+        await handle_event(event)  # your existing handler
     await avatar.end_turn()
 ```
 
@@ -134,7 +154,7 @@ from openspline import Openspline, OpensplineConfig
 
 client = Openspline(url="http://localhost:7860", quality="low")
 config = OpensplineConfig(quality="high", timeout=300, viewer_timeout=90)
-client = Openspline(config=config) # a dict works too
+client = Openspline(config=config)  # a dict works too
 ```
 
 | Python / Node option | Default | Purpose |
@@ -146,7 +166,7 @@ client = Openspline(config=config) # a dict works too
 
 Explicit Python parameters override the config object; explicit settings override environment defaults. `avatar(..., quality="high")` overrides that session only. Invalid configuration fails before connecting. [JSON Schema](config.schema.json) describes Python settings, with `#/$defs/node` and `#/$defs/server` for Node and worker configuration. Only `avatar.session` should be passed to a browser.
 
-## Node
+## Node SDK
 
 Use Node 20+ and install the SDK with one command:
 
@@ -183,7 +203,11 @@ The built-in demo uses WebSocket playback through the server's HTTP port, includ
 
 ## GPU workers
 
+### Choose GPUs in the demo
+
 Choose GPUs directly in the demo: one for Low, or one or more for High. The picker shows GPU names and memory; your selection is applied when you start and saved for restarts by the curl install. You can also set `OPENSPLINE_GPUS=0,1` when installing. Explicit `CUDA_VISIBLE_DEVICES` limits are respected. `/readyz` reports the active devices and inference ranks.
+
+### Configure multiple workers
 
 Edit `~/.local/share/openspline/workers.yaml` ([example](workers.yaml)). Each worker loads weights once and serves one session at a time; device assignments cannot overlap.
 
@@ -194,6 +218,8 @@ workers:
 ```
 
 The demo switches quality automatically for a single worker. For SDK sessions or multiple workers, configure a worker with `quality: high, devices: [0, 1]` to use a GPU pair, then run `sh ~/.local/share/openspline/run.sh --prepare` before starting. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. IDs are relative to `CUDA_VISIBLE_DEVICES` when set. For multiple workers, remove `OPENSPLINE_GPU`, `OPENSPLINE_GPUS`, and `OPENSPLINE_QUALITY` overrides from the installed `.env` and configure devices in `workers.yaml`.
+
+### Network settings
 
 Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, `OPENSPLINE_PUBLIC_URL`, and provider credentials in the installed `.env`. Use HTTPS for remote microphone access. WebRTC playback additionally needs reachable UDP ports or TURN configured in `ice_servers`. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
 
@@ -210,6 +236,6 @@ Real low/high inference, GPU streaming, browser/React playback, and native LiveK
 
 ## License
 
-[Apache-2.0](LICENSE). Vendored code retains its [third-party notices](packages/server/NOTICE); model weights have separate terms.
+[MIT](LICENSE). The vendored inference code retains its [Apache-2.0 license](packages/server/src/openspline_server/_vendor/LICENSE) and [third-party notices](packages/server/NOTICE); model weights have separate terms.
 
 Built on [SoulX-FlashHead](https://github.com/Soul-AILab/SoulX-FlashHead).

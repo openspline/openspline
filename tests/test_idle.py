@@ -153,3 +153,45 @@ async def test_socket_idle_is_paced_acknowledged_and_independent_of_audio():
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
+
+
+async def test_idle_keeps_displaying_motion_while_inference_is_late():
+    # A delayed GPU result must not stop idle video output or compound
+    # transforms on the previous rendered frame.
+    gradient = np.arange(512, dtype=np.uint8)[None, :, None]
+    portrait = np.broadcast_to(gradient, (512, 512, 3)).copy()
+    timeline = Timeline(portrait)
+    pictures = []
+    for _ in range(75):
+        assert timeline.advance_idle(1920)
+        pictures.append(timeline.frame.copy())
+    assert np.array_equal(timeline.idle_source, portrait)
+    assert not np.array_equal(pictures[0], pictures[-1])
+    assert not np.array_equal(pictures[25], pictures[50])
+    assert timeline.submitted == timeline.sent == timeline.played == 0
+
+
+async def test_silent_model_clip_loops_without_repeated_diffusion_drift(tmp_path):
+    session, worker = await make_session(tmp_path)
+    try:
+        session.viewer_ready.set()
+        for _ in range(100):
+            session.timeline.audio(1920)
+            if session.metrics["idle_blocks"] == 2:
+                break
+            await asyncio.sleep(0.01)
+        assert session.metrics["idle_blocks"] == 2
+        assert session.timeline.idle_loop is not None
+        for _ in range(150):
+            session.timeline.audio(1920)
+            await asyncio.sleep(0)
+        assert [op for op, _ in worker.calls].count("infer") == 2
+        assert session.timeline.idle_source is not None
+        # Speech gets a fresh model result and clears the silent loop.
+        await session.push(np.ones(480, dtype="<i2").tobytes(), {"sample_rate": 48000})
+        await session.end_turn()
+        assert session.timeline.idle_loop is None
+        assert session.idle_generated_since_speech == 0
+        assert [op for op, _ in worker.calls].count("infer") == 3
+    finally:
+        await session.close()

@@ -1,6 +1,7 @@
 """Audio drives the shared playout clock; video samples that same position."""
 
 import asyncio
+import math
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -9,6 +10,7 @@ from fractions import Fraction
 import av
 import numpy as np
 from aiortc import MediaStreamTrack
+from PIL import Image
 
 
 @dataclass
@@ -36,26 +38,80 @@ class Timeline:
         self.idle_current = None
         self.idle_next = None
         self.idle_offset = 0
+        self.idle_batches = 0
+        self.idle_loop = None
+        self.idle_reverse = False
+        self.idle_source = None
+        self.idle_elapsed = 0
+        self.idle_rendered_tick = -1
 
     def clear_idle(self):
         self.idle_current = self.idle_next = None
         self.idle_offset = 0
+        self.idle_batches = 0
+        self.idle_loop = None
+        self.idle_reverse = False
+        self.idle_source = None
+        self.idle_elapsed = 0
+        self.idle_rendered_tick = -1
 
     def put_idle(self, frames, fps, epoch):
         if epoch == self.epoch:
             self.idle_next = (frames, fps)
+            self.idle_batches += 1
+            # The first batch settles the mouth after speech. Reuse the second
+            # batch so fresh random diffusion noise cannot slowly deform a face.
+            if self.idle_batches == 2:
+                self.idle_loop = (frames, fps)
+
+    def _idle_frame(self, frame):
+        t = self.idle_elapsed / 48000
+        height, width = frame.shape[:2]
+        unit = min(height, width) / 512
+        zoom = 1.012 + 0.002 * math.sin(t * 0.75)
+        x = 1.2 * unit * math.sin(t * 0.7)
+        y = 1.1 * unit * math.sin(t * 0.9)
+        # Resample the original frame, never the previously animated result.
+        # This provides continuous, gentle motion even if GPU inference is late.
+        image = Image.fromarray(frame).transform(
+            (width, height),
+            Image.Transform.AFFINE,
+            (
+                1 / zoom,
+                0,
+                width * (1 - 1 / zoom) / 2 - x,
+                0,
+                1 / zoom,
+                height * (1 - 1 / zoom) / 2 - y,
+            ),
+            Image.Resampling.BILINEAR,
+        )
+        return np.asarray(image)
 
     def advance_idle(self, samples):
         if self.idle_current is None:
             if self.idle_next is None:
-                return False
-            self.idle_current, self.idle_next = self.idle_next, None
-            self.idle_offset = 0
-        frames, fps = self.idle_current
-        self.frame = frames[min(len(frames) - 1, self.idle_offset * fps // 48000)]
-        self.idle_offset += samples
-        if self.idle_offset * fps >= len(frames) * 48000:
-            self.idle_current = None
+                if self.idle_loop is not None:
+                    frames, fps = self.idle_loop
+                    self.idle_reverse = not self.idle_reverse
+                    self.idle_current = (frames[::-1] if self.idle_reverse else frames, fps)
+                    self.idle_offset = 0
+            else:
+                self.idle_current, self.idle_next = self.idle_next, None
+                self.idle_offset = 0
+        if self.idle_current is not None:
+            frames, fps = self.idle_current
+            self.idle_source = frames[min(len(frames) - 1, self.idle_offset * fps // 48000)]
+            self.idle_offset += samples
+            if self.idle_offset * fps >= len(frames) * 48000:
+                self.idle_current = None
+        if self.idle_source is None:
+            self.idle_source = self.frame
+        self.idle_elapsed += samples
+        tick = (self.idle_elapsed - 1) // 1920
+        if tick != self.idle_rendered_tick:
+            self.frame = self._idle_frame(self.idle_source)
+            self.idle_rendered_tick = tick
         return True
 
     async def put(self, segment):

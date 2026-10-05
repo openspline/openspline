@@ -6,17 +6,38 @@ import shutil
 import subprocess
 import sys
 import tarfile
+from io import StringIO
 from pathlib import Path
 
 import pytest
+from openspline_server.install_message import print_install_message
+from rich.console import Console
 
 
-@pytest.mark.parametrize("no_start", [False, True])
+def test_install_message_shows_launch_and_optional_keys():
+    install = Path("/tmp/install with spaces")
+    plain = StringIO()
+    print_install_message(install, Console(file=plain, force_terminal=False, width=120))
+    output = plain.getvalue()
+    assert "sh '/tmp/install with spaces/run.sh'" in output
+    assert "/tmp/install with spaces/.env" in output
+    assert "OPENAI_API_KEY=your_openai_key" in output
+    assert "GEMINI_API_KEY=your_gemini_key" in output
+    assert "Audio file mode needs no key" in output
+    assert "\x1b[" not in output
+
+    colored = StringIO()
+    print_install_message(
+        install, Console(file=colored, force_terminal=True, color_system="standard", width=120)
+    )
+    assert "\x1b[" in colored.getvalue()
+
+
 @pytest.mark.parametrize("cuda", ["cu126", "cu128"])
 @pytest.mark.parametrize("check_fails", [False, True])
 @pytest.mark.parametrize("download_fails", [False, True])
-def test_archive_install_preserves_config_and_launches_native(
-    tmp_path, no_start, cuda, check_fails, download_fails
+def test_archive_install_preserves_config_without_launching_native(
+    tmp_path, cuda, check_fails, download_fails
 ):
     repo = Path(__file__).resolve().parents[1]
     source = tmp_path / "release"
@@ -56,7 +77,6 @@ def test_archive_install_preserves_config_and_launches_native(
         PATH=f"{bin_dir}:{os.environ['PATH']}",
         OPENSPLINE_INSTALL_DIR=str(install),
         OPENSPLINE_ARCHIVE_URL=archive.as_uri(),
-        OPENSPLINE_NO_START=str(int(no_start)),
         INSTALL_TEST_LOG=str(log),
     )
     result = subprocess.run(
@@ -65,6 +85,7 @@ def test_archive_install_preserves_config_and_launches_native(
     if check_fails:
         assert result.returncode != 0
         assert "--prepare" not in log.read_text()
+        assert "openspline_server.install_message" not in log.read_text()
         return
     if download_fails:
         assert result.returncode != 0
@@ -74,6 +95,7 @@ def test_archive_install_preserves_config_and_launches_native(
             if "openspline_server.native" in line
         ]
         assert len(launches) == 1 and "--prepare" in launches[0]
+        assert "openspline_server.install_message" not in log.read_text()
         return
     assert result.returncode == 0, result.stderr
     assert (install / ".env").read_text() == "OPENAI_API_KEY=keep-existing\n"
@@ -85,8 +107,10 @@ def test_archive_install_preserves_config_and_launches_native(
     assert str(install / f"requirements/{cuda}.txt") in gpu_install
     assert any(call[-2:] == ["openspline_server.hardware", "--check"] for call in calls)
     launches = [call for call in calls if "openspline_server.native" in call]
-    assert len(launches) == (1 if no_start else 2)
+    assert len(launches) == 1
     assert launches[0][-2:] == ["--prepare", "--save-selection"]
-    if not no_start:
-        assert launches[1][-1] == "openspline_server.native"
+    assert any(
+        call[-2:] == ["openspline_server.install_message", str(install)]
+        for call in calls
+    )
     assert not list((install / "runtime/tmp").iterdir())

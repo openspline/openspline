@@ -6,7 +6,7 @@ name = "openspline"
 version = "0.1.0"
 description = "Add a live face to any voice agent"
 requires-python = ">=3.10,<3.13"
-license = "Apache-2.0"
+license = "MIT"
 dependencies = ["httpx>=0.27,<1", "websockets>=12,<16"]
 [project.optional-dependencies]
 media = ["aiortc>=1.14,<2", "av>=14,<17"]
