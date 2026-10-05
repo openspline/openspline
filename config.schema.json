@@ -78,6 +78,13 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "demo_high_devices": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 0},
+          "description": "GPU group for High in a single-worker demo. Low uses the first GPU."
+        },
         "workers": {
           "type": "array",
           "minItems": 1,

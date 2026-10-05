@@ -7,9 +7,50 @@ import subprocess
 from pathlib import Path
 
 
+def list_gpus(visible=None):
+    """List allowed CUDA ordinals without initializing CUDA in the API process."""
+    result = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,name,memory.total,memory.free",
+            "--format=csv,noheader,nounits",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    rows = [[column.strip() for column in row] for row in csv.reader(result.stdout.splitlines())]
+    if visible is None:
+        visible = os.getenv("CUDA_VISIBLE_DEVICES")
+    selectors = visible.split(",") if visible is not None else [row[0] for row in rows]
+    devices = []
+    for ordinal, selector in enumerate(selectors):
+        matches = [
+            r
+            for r in rows
+            if r[0] == selector.strip()
+            or (selector.strip().startswith("GPU-") and r[1].startswith(selector.strip()))
+        ]
+        if len(matches) != 1:
+            continue
+        index, uuid, name, total, free = matches[0]
+        devices.append(
+            dict(
+                id=ordinal,
+                physical_id=int(index),
+                uuid=uuid,
+                name=name,
+                memory_total_mb=int(total),
+                memory_free_mb=int(free),
+            )
+        )
+    return devices
+
+
 def select_runtime(settings, inventory, visible=None):
     """Inventory is from nvidia-smi; worker IDs refer to CUDA-visible ordinals."""
-    devices = sorted({device for worker in settings.workers for device in worker.devices})
+    devices = settings.gpu_devices
     selectors = visible.split(",") if visible is not None else None
     selected = []
     for device in devices:
@@ -72,6 +113,20 @@ def validate_cuda(device=0):
     return dtype
 
 
+def validate_distributed():
+    try:
+        from xfuser.core.distributed import initialize_model_parallel
+        from xfuser.core.long_ctx_attention import xFuserLongContextAttention
+        from yunchang.kernels import AttnType
+
+        assert initialize_model_parallel and xFuserLongContextAttention and AttnType.TORCH_FLASH
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(
+            "The multi-GPU runtime is missing or incompatible. Rerun install.sh "
+            "with OPENSPLINE_GPUS set to your GPU group. " + str(exc)
+        ) from exc
+
+
 def main():
     from .native import configure, environment
 
@@ -82,7 +137,11 @@ def main():
     try:
         settings = configure(os.getenv("OPENSPLINE_CONFIG", "workers.yaml"))
         if args.check:
-            for device in sorted({d for w in settings.workers for d in w.devices}):
+            if len(settings.demo_high_devices or ()) > 1 or any(
+                len(w.devices) > 1 for w in settings.workers
+            ):
+                validate_distributed()
+            for device in settings.gpu_devices:
                 dtype = validate_cuda(device)
                 print(f"GPU {device}: CUDA verified, inference precision {dtype}")
         else:

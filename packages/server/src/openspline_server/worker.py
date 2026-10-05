@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import logging
 import multiprocessing as mp
 import os
 import signal
 import socket
+import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -39,9 +41,11 @@ class TestEngine:
 
 class GPUEngine:
     def __init__(self, settings, world_size):
-        from .hardware import validate_cuda
+        from .hardware import validate_cuda, validate_distributed
 
         dtype = validate_cuda(int(os.environ.get("LOCAL_RANK", "0")))
+        if world_size > 1:
+            validate_distributed()
         from ._vendor.flash_head import inference as inf
 
         self.inf = inf
@@ -52,6 +56,19 @@ class GPUEngine:
             settings["audio_model_dir"],
             param_dtype=dtype,
         )
+        if world_size > 1:
+            import torch.distributed as dist
+
+            if (
+                not dist.is_initialized()
+                or dist.get_world_size() != world_size
+                or self.pipeline.sp_size != world_size
+            ):
+                raise WorkerFailure(
+                    "The configured GPU group did not initialize all inference ranks"
+                )
+            # Report readiness only after every rank has finished loading its model.
+            dist.barrier()
         self.params = inf.get_infer_params()
         self.fps = self.params["tgt_fps"]
         self.motion = self.params["motion_frames_num"]
@@ -98,6 +115,7 @@ def _rank_main(rank, world_size, settings, conn, port):
                         fps=engine.fps,
                         chunk_samples=engine.chunk_samples,
                         cache_samples=engine.cache_samples,
+                        world_size=world_size,
                     ),
                 )
             )
@@ -204,6 +222,14 @@ class Worker:
 
     async def start(self):
         self.ready = False
+        self.info = {}
+        logging.getLogger(__name__).warning(
+            "Starting worker %s: quality=%s, devices=%s, backend=%s",
+            self.config.id,
+            self.config.quality,
+            list(self.config.devices),
+            self.settings.backend,
+        )
         parent, child = mp.get_context("spawn").Pipe()
         payload = dict(
             backend=self.settings.backend,
@@ -298,8 +324,25 @@ class Worker:
 class WorkerPool:
     def __init__(self, settings):
         self.settings = settings
+        first = settings.workers[0]
+        self.demo_devices = (
+            {"low": first.devices[:1], "high": settings.demo_high_devices or first.devices}
+            if len(settings.workers) == 1
+            else {}
+        )
         self.workers = [Worker(c, settings) for c in settings.workers]
         self.lock = asyncio.Lock()
+        self._test_devices = settings.gpu_devices
+
+    async def gpu_options(self):
+        if self.settings.backend == "test":
+            return [
+                dict(id=d, physical_id=d, name="Test GPU", memory_total_mb=0, memory_free_mb=0)
+                for d in self._test_devices
+            ]
+        from .hardware import list_gpus
+
+        return await asyncio.to_thread(list_gpus)
 
     async def start(self):
         await asyncio.gather(*(w.start() for w in self.workers))
@@ -332,15 +375,42 @@ class WorkerPool:
                     return w
             raise CapacityError("All workers for this quality are occupied or unavailable")
 
-    async def reserve_quality_switch(self, quality, owner):
-        """Reserve the default single-GPU worker; never displace an active session."""
+    async def reserve_quality_switch(self, quality, owner, devices=None):
+        """Reserve one worker's GPU group; never displace an active session."""
         if not isinstance(quality, str) or quality not in {"low", "high"}:
             raise ValueError("quality must be low or high")
+        if devices is not None:
+            if len(self.workers) != 1:
+                raise ValueError(
+                    "GPU selection is managed by workers.yaml in a multi-worker deployment"
+                )
+            if (
+                not isinstance(devices, (list, tuple))
+                or not devices
+                or any(type(d) is not int or d < 0 for d in devices)
+                or len(set(devices)) != len(devices)
+                or (quality == "low" and len(devices) != 1)
+            ):
+                raise ValueError("Select one GPU for Low, or one or more unique GPUs for High")
+            try:
+                allowed = {d["id"] for d in await self.gpu_options()}
+            except (OSError, subprocess.SubprocessError) as exc:
+                raise ValueError(
+                    "Could not read GPU availability; check the NVIDIA driver"
+                ) from exc
+            if not set(devices) <= allowed:
+                raise ValueError("A selected GPU is unavailable or outside CUDA_VISIBLE_DEVICES")
+            devices = tuple(devices)
         async with self.lock:
             for worker in self.workers:
-                if worker.config.quality == quality and worker.ready and worker.owner is None:
+                if (
+                    devices is None
+                    and worker.config.quality == quality
+                    and worker.ready
+                    and worker.owner is None
+                ):
                     return None
-            if len(self.workers) != 1 or len(self.workers[0].config.devices) != 1:
+            if len(self.workers) != 1:
                 if any(w.config.quality == quality for w in self.workers):
                     raise CapacityError("All workers for this quality are occupied or unavailable")
                 raise ValueError("Configure a worker for this quality in a multi-worker deployment")
@@ -352,22 +422,37 @@ class WorkerPool:
             worker.owner = owner
             return worker
 
-    async def switch_quality(self, worker, quality, owner, progress):
+    async def switch_quality(self, worker, quality, owner, progress, devices=None):
         from .quality import prepare_quality
 
         previous = worker.config
+        target = tuple(devices) if devices is not None else self.demo_devices[quality]
+        mapping = dict(self.demo_devices)
+        if devices is not None:
+            mapping["low"] = target[:1]
+            if quality == "high" or mapping["high"][:1] != target[:1]:
+                mapping["high"] = target
         unloaded = False
         try:
             progress("checking")
             await prepare_quality(self.settings, quality)
-            progress("unloading")
-            unloaded = True
-            await worker.stop()
-            worker.config = replace(previous, quality=quality)
-            progress("loading")
-            await worker.start()
-            if not worker.ready:
-                raise WorkerFailure(worker.error or "Model could not load")
+            if not worker.ready or previous.quality != quality or previous.devices != target:
+                progress("unloading")
+                unloaded = True
+                await worker.stop()
+                worker.config = replace(previous, quality=quality, devices=target)
+                progress("loading")
+                await worker.start()
+                if not worker.ready:
+                    raise WorkerFailure(worker.error or "Model could not load")
+            if devices is not None and self.settings.save_demo_selection:
+                options = {d["id"]: d["physical_id"] for d in await self.gpu_options()}
+                await asyncio.to_thread(
+                    self.settings.save_demo_selection,
+                    [options[d] for d in mapping["high"]],
+                    quality,
+                )
+            self.demo_devices = mapping
         except asyncio.CancelledError:
             await worker.stop()
             worker.config = previous

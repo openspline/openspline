@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from openspline_server.config import Settings, WorkerConfig
-from openspline_server.hardware import select_runtime, validate_cuda
+from openspline_server.hardware import list_gpus, select_runtime, validate_cuda
 
 
 def settings(*devices):
@@ -42,6 +42,32 @@ def test_only_configured_gpus_and_visibility_remapping():
         select_runtime(settings(1), inventory, "1")
     with pytest.raises(ValueError, match="not found"):
         select_runtime(settings(2), inventory)
+
+
+def test_runtime_checks_high_group_even_while_low_is_loaded():
+    config = Settings(demo_high_devices=(0, 1))
+    inventory = [["2", "GPU-first", "9.0"], ["4", "GPU-second", "12.0"]]
+    assert select_runtime(config, inventory, "2,4") == "cu128"
+    with pytest.raises(ValueError, match="outside CUDA_VISIBLE_DEVICES"):
+        select_runtime(config, inventory, "2")
+
+
+def test_gpu_picker_respects_visible_ordinals_and_shows_physical_names(monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-third,0")
+    monkeypatch.setattr(
+        "openspline_server.hardware.subprocess.run",
+        lambda *a, **kw: SimpleNamespace(
+            stdout=(
+                "0, GPU-first, NVIDIA H100 NVL, 95830, 90000\n"
+                "1, GPU-second, NVIDIA H100 NVL, 95830, 80000\n"
+                "2, GPU-third, NVIDIA RTX 5090, 32607, 20000\n"
+            )
+        ),
+    )
+    devices = list_gpus()
+    assert [(d["id"], d["physical_id"]) for d in devices] == [(0, 2), (1, 0)]
+    assert devices[0]["name"] == "NVIDIA RTX 5090"
+    assert devices[0]["memory_free_mb"] == 20000
 
 
 def test_mixed_modern_workers_use_one_compatible_runtime():

@@ -2,4 +2,4 @@
 
 The internal inference backend is derived from [SoulX-FlashHead](https://github.com/Soul-AILab/SoulX-FlashHead), revision `07d3562aec9124a8069ee1cf26eeb440029159f4`, under Apache-2.0. Original source headers are retained. It includes implementations derived from Alibaba Wan and Lightricks LTX-Video; retain their notices when redistributing. Model weights are downloaded separately and retain their original terms.
 
-Local changes: package-relative imports/resources, lazy optional dependencies, configurable compilation, hardware-selected inference precision, FP32 attention fallback, and process-isolated serving.
+Local changes: package-relative imports/resources, lazy optional dependencies, configurable compilation, hardware-selected inference precision, PyTorch attention fallbacks for single and multiple GPUs, distributed startup timeouts, and process-isolated serving.

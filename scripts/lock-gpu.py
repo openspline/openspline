@@ -27,6 +27,8 @@ def main():
             "demo",
             "--extra",
             "livekit",
+            "--extra",
+            "distributed",
             "--no-dev",
             "--no-emit-workspace",
         ],

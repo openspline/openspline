@@ -32,7 +32,7 @@ npm install @openspline/node
 
 The installer creates a private Python environment, downloads models, and runs the service in your terminal. It defaults to GPU 0; select another with `curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh`. No sudo is needed. Press Ctrl-C to stop; restart with `sh ~/.local/share/openspline/run.sh`.
 
-The installer downloads both Low and High models before launching the single-GPU demo. Select either quality and start playback; switching loads the selected model from disk, with no downloads during use. Only one model and session run at a time.
+The installer downloads both Low and High models before launching the demo. Select either quality and start playback; switching loads the selected model from disk, with no downloads during use. Only one model and session run at a time.
 
 PyTorch's CUDA build is selected automatically: CUDA 12.8 for Blackwell (including RTX 50-series), and CUDA 12.6 for older NVIDIA GPUs. Pre-Ampere cards use FP32, which needs more VRAM and may be slower. A compatible NVIDIA driver and enough VRAM are required; AMD and Apple GPUs are not supported by this backend. Blackwell and pre-Ampere inference still need hardware validation.
 
@@ -183,6 +183,8 @@ The built-in demo uses WebSocket playback through the server's HTTP port, includ
 
 ## GPU workers
 
+Choose GPUs directly in the demo: one for Low, or one or more for High. The picker shows GPU names and memory; your selection is applied when you start and saved for restarts by the curl install. You can also set `OPENSPLINE_GPUS=0,1` when installing. Explicit `CUDA_VISIBLE_DEVICES` limits are respected. `/readyz` reports the active devices and inference ranks.
+
 Edit `~/.local/share/openspline/workers.yaml` ([example](workers.yaml)). Each worker loads weights once and serves one session at a time; device assignments cannot overlap.
 
 ```yaml
@@ -191,7 +193,7 @@ workers:
   - { id: low-1, quality: low, devices: [1] }
 ```
 
-The single-GPU demo switches quality automatically. For SDK sessions or multiple workers, configure a worker with `quality: high` and run `sh ~/.local/share/openspline/run.sh --prepare` before starting. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. A high-quality worker can reserve multiple GPUs with the server's `distributed` extra. IDs are relative to `CUDA_VISIBLE_DEVICES` when set. For multiple workers, remove `OPENSPLINE_GPU` and `OPENSPLINE_QUALITY` overrides from the installed `.env` and configure devices in `workers.yaml`.
+The demo switches quality automatically for a single worker. For SDK sessions or multiple workers, configure a worker with `quality: high, devices: [0, 1]` to use a GPU pair, then run `sh ~/.local/share/openspline/run.sh --prepare` before starting. Busy workers return a typed `CapacityError`; an unconfigured quality returns `ConfigurationError`. IDs are relative to `CUDA_VISIBLE_DEVICES` when set. For multiple workers, remove `OPENSPLINE_GPU`, `OPENSPLINE_GPUS`, and `OPENSPLINE_QUALITY` overrides from the installed `.env` and configure devices in `workers.yaml`.
 
 Set `OPENSPLINE_HOST`, `OPENSPLINE_PORT`, `OPENSPLINE_PUBLIC_URL`, and provider credentials in the installed `.env`. Use HTTPS for remote microphone access. WebRTC playback additionally needs reachable UDP ports or TURN configured in `ice_servers`. API reference: **http://localhost:7860/docs**. Health: `/readyz`; metrics: `/metrics`.
 

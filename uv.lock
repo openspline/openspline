@@ -1871,6 +1871,7 @@ demo = [
 ]
 distributed = [
     { name = "xfuser" },
+    { name = "yunchang" },
 ]
 gpu = [
     { name = "accelerate" },
@@ -1918,7 +1919,8 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.22.1" },
     { name = "transformers", marker = "extra == 'gpu'", specifier = "==4.57.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
-    { name = "xfuser", marker = "extra == 'distributed'", specifier = ">=0.4.3,<1" },
+    { name = "xfuser", marker = "extra == 'distributed'", specifier = "==0.4.5" },
+    { name = "yunchang", marker = "extra == 'distributed'", specifier = "==0.6.4" },
 ]
 provides-extras = ["livekit", "demo", "gpu", "distributed"]
 
@@ -2041,29 +2043,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
-]
-
-[[package]]
-name = "peft"
-version = "0.21.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "accelerate" },
-    { name = "huggingface-hub" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "packaging" },
-    { name = "psutil" },
-    { name = "pyyaml" },
-    { name = "safetensors" },
-    { name = "torch" },
-    { name = "tqdm" },
-    { name = "transformers" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/80/af/2e08abf1cd3b8792a02f5116808f2398c2f77ecdff801ced2ce16007a6f9/peft-0.21.2.tar.gz", hash = "sha256:b803ccfb3f3f316004d850284306687833a2235ea278fb56abc856203456142e", size = 983614, upload-time = "2026-10-01T10:26:36.129Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/70/0b/59441cdbfdd342ed03c08af90a2fe16173f0cd48ab219f523b39ca059a79/peft-0.21.2-py3-none-any.whl", hash = "sha256:106ab6077ff72c54d21577f9af5970e34bac7582cb14209f7b2b511e322a4eae", size = 835427, upload-time = "2026-10-01T10:26:34.085Z" },
 ]
 
 [[package]]
@@ -3529,28 +3508,22 @@ wheels = [
 
 [[package]]
 name = "xfuser"
-version = "0.7.0"
+version = "0.4.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "accelerate" },
-    { name = "av" },
     { name = "beautifulsoup4" },
     { name = "diffusers" },
     { name = "distvae" },
     { name = "einops" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "peft" },
-    { name = "pyyaml" },
     { name = "sentencepiece" },
     { name = "torch" },
     { name = "transformers" },
     { name = "yunchang" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/04/904141d2e5f893f7f744aa8afe8bf2cb0e36d3570532f29a6364387a3c98/xfuser-0.7.0.tar.gz", hash = "sha256:2fea67c4aff09159c93a91f99cb27f235c06e17d23604b9e2bb66c74ee033f16", size = 820546, upload-time = "2026-09-25T10:43:09.887Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/52/4f94d1348275009a284e347e0a429864ba6757b8b2eca9781cf6f77ef14c/xfuser-0.4.5.tar.gz", hash = "sha256:bfd985b9a2f27bc541fc71e6a224bcdbfd945a25ead7e89976ced1ea63bc3e64", size = 184100, upload-time = "2025-11-12T13:42:24.243Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/a5/3c155a618f485e69033d5da528e671ede9d2e0ca25500b5003ca1bfdc8d4/xfuser-0.7.0-py3-none-any.whl", hash = "sha256:873a76402e7423d0382375886acf7ceabe6ba10183e8249b529f02251d13c0cd", size = 1024723, upload-time = "2026-09-25T10:43:08.273Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/54/444f7b06dcf35486847c05e0b109884e46de01fad769193facb43ec354d8/xfuser-0.4.5-py3-none-any.whl", hash = "sha256:6d660a733f9f96c06be48dd9d4cbb17b29d133a0288939c95adeb1a2beff5b5d", size = 241359, upload-time = "2025-11-12T13:42:23.155Z" },
 ]
 
 [[package]]

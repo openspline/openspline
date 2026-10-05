@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from openspline_server.native import configure, environment, main, prepare
+from openspline_server.native import configure, environment, main, prepare, save_demo_selection
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +40,93 @@ def test_physical_gpu_remaps_to_single_logical_device(tmp_path, monkeypatch):
     assert os.environ["CUDA_VISIBLE_DEVICES"] == "1"
     assert settings.workers[0].devices == (0,)
     assert settings.workers[0].quality == "high"
+
+
+@pytest.mark.parametrize("quality,devices", [("low", (0,)), ("high", (0, 1))])
+def test_gpu_pair_remaps_and_overrides_legacy_single_gpu(tmp_path, monkeypatch, quality, devices):
+    monkeypatch.setenv("OPENSPLINE_GPU", "0")
+    monkeypatch.setenv("OPENSPLINE_GPUS", "2, 4")
+    monkeypatch.setenv("OPENSPLINE_QUALITY", quality)
+    settings = configure(workers(tmp_path))
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "2,4"
+    assert settings.workers[0].devices == devices
+    assert settings.demo_high_devices == (0, 1)
+    assert settings.gpu_devices == [0, 1]
+
+
+def test_native_demo_keeps_other_gpus_selectable(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENSPLINE_GPU", "1")
+    settings = configure(workers(tmp_path), demo=True)
+    assert "CUDA_VISIBLE_DEVICES" not in os.environ
+    assert settings.workers[0].devices == (1,)
+    assert settings.demo_high_devices == (1,)
+
+
+def test_native_demo_preserves_external_visibility_boundary(tmp_path, monkeypatch):
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "GPU-second,GPU-first")
+    monkeypatch.setenv("OPENSPLINE_GPUS", "0,1")
+    monkeypatch.setenv("OPENSPLINE_QUALITY", "high")
+    monkeypatch.setattr(
+        "openspline_server.hardware.list_gpus",
+        lambda: [
+            {"id": 0, "physical_id": 1},
+            {"id": 1, "physical_id": 0},
+        ],
+    )
+    settings = configure(workers(tmp_path), demo=True)
+    assert settings.workers[0].devices == (1, 0)
+    assert os.environ["CUDA_VISIBLE_DEVICES"] == "GPU-second,GPU-first"
+    monkeypatch.setenv("OPENSPLINE_GPUS", "2")
+    with pytest.raises(ValueError, match="outside CUDA_VISIBLE_DEVICES"):
+        configure(workers(tmp_path), demo=True)
+
+
+def test_demo_selection_survives_restart_without_replacing_other_settings(tmp_path, monkeypatch):
+    path = tmp_path / ".env"
+    path.write_text("OPENSPLINE_GPU=0\nOPENAI_API_KEY=keep-existing\n")
+    save_demo_selection(path, [1, 0], "high")
+    assert "OPENSPLINE_GPU=" not in path.read_text()
+    assert "OPENAI_API_KEY=keep-existing" in path.read_text()
+    assert not list(tmp_path.glob(".openspline-selection-*"))
+    environment(tmp_path)
+    settings = configure(workers(tmp_path), demo=True)
+    assert settings.workers[0].devices == (1, 0)
+    assert settings.workers[0].quality == "high"
+
+
+@pytest.mark.parametrize("selection", ["", "0,", "0,-1", "0,0", "0,00", "all", "0,x"])
+def test_invalid_gpu_groups_rejected(tmp_path, monkeypatch, selection):
+    monkeypatch.setenv("OPENSPLINE_GPUS", selection)
+    with pytest.raises(ValueError, match="OPENSPLINE_GPUS"):
+        configure(workers(tmp_path))
+
+
+def test_gpu_group_cannot_replace_multiple_workers(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENSPLINE_GPUS", "0,1")
+    with pytest.raises(ValueError, match="multiple workers"):
+        configure(workers(tmp_path, "workers: [{id: a, devices: [0]}, {id: b, devices: [1]}]"))
+
+
+def test_preparation_persists_gpu_pair_and_removes_legacy_pin(tmp_path, monkeypatch):
+    workers(tmp_path)
+    (tmp_path / ".env").write_text("OPENSPLINE_GPU=0\nOPENAI_API_KEY=keep\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OPENSPLINE_GPUS", "0,1")
+    monkeypatch.setattr("sys.argv", ["native", "--prepare", "--save-selection"])
+    downloads = []
+    monkeypatch.setattr("openspline_server.cli.download", downloads.append)
+    main()
+    assert downloads[0].quality == "all"
+    saved = (tmp_path / ".env").read_text()
+    assert "OPENSPLINE_GPUS='0,1'" in saved and "OPENSPLINE_GPU=" not in saved
+    assert "OPENAI_API_KEY=keep" in saved
+
+
+def test_configured_high_group_is_retained_when_starting_low(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENSPLINE_QUALITY", "low")
+    settings = configure(workers(tmp_path, "workers: [{id: pair, quality: high, devices: [1, 2]}]"))
+    assert settings.workers[0].devices == (1,)
+    assert settings.demo_high_devices == (1, 2)
 
 
 def test_existing_multiple_workers_are_preserved(tmp_path):

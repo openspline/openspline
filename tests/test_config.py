@@ -65,8 +65,17 @@ def test_schema_validates_client_and_worker_examples():
         ("python", {"quality": "high", "timeout": 30}),
         ("node", {"quality": "low", "viewerTimeout": 1000}),
         ("server", yaml.safe_load(Path("workers.yaml").read_text())),
+        (
+            "server",
+            {
+                "workers": [{"id": "demo", "quality": "low", "devices": [0]}],
+                "demo_high_devices": [0, 1],
+            },
+        ),
     ]:
         validator = Draft202012Validator({**schema, "$ref": f"#/$defs/{kind}"})
         validator.validate(data)
         assert not validator.is_valid({"unknown_field": True})
     assert not Draft202012Validator(schema).is_valid({"quality": "pro"})
+    server = Draft202012Validator({**schema, "$ref": "#/$defs/server"})
+    assert not server.is_valid({"demo_high_devices": [0, 0]})

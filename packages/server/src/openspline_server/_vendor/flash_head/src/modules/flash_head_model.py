@@ -183,10 +183,18 @@ class SelfAttention(nn.Module):
 
         if self.use_usp:
             from yunchang.kernels import AttnType
-            if SAGE_ATTN_AVAILABLE:
+            if q.dtype == torch.float32:
+                attn_type = AttnType.TORCH_MATH
+            elif SAGE_ATTN_AVAILABLE:
                 attn_type = AttnType.SAGE_AUTO
-            else:
+            elif FLASH_ATTN_2_AVAILABLE:
                 attn_type = AttnType.FA
+            elif FLASH_ATTN_3_AVAILABLE:
+                attn_type = AttnType.FA3
+            else:
+                # PyTorch includes this CUDA kernel; native installs don't need
+                # a separately compiled flash-attn package for distributed inference.
+                attn_type = AttnType.TORCH_FLASH
 
             x = xFuserLongContextAttention(attn_type=attn_type)(
                 None,

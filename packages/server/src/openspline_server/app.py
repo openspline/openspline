@@ -122,14 +122,19 @@ def create_app(settings: Settings | None = None):
     async def prepare_demo_quality(request: Request):
         body = await request.json()
         quality = body.get("quality") if isinstance(body, dict) else None
+        devices = body.get("devices") if isinstance(body, dict) else None
         id = secrets.token_hex(16)
         owner = f"quality-switch:{id}"
         try:
-            worker = await pool.reserve_quality_switch(quality, owner)
+            worker = await pool.reserve_quality_switch(quality, owner, devices)
         except ValueError as exc:
             raise HTTPException(422, {"code": "configuration", "message": str(exc)}) from exc
         except CapacityError as exc:
             raise HTTPException(429, {"code": "capacity", "message": str(exc)}) from exc
+        except (OSError, RuntimeError) as exc:
+            raise HTTPException(
+                503, {"code": "hardware", "message": "Could not read GPU availability"}
+            ) from exc
         if worker is None:
             return {"id": None, "quality": quality, "state": "ready"}
         job = {"id": id, "quality": quality, "state": "checking", "error": None}
@@ -141,7 +146,7 @@ def create_app(settings: Settings | None = None):
         async def prepare():
             try:
                 await pool.switch_quality(
-                    worker, quality, owner, lambda state: job.update(state=state)
+                    worker, quality, owner, lambda state: job.update(state=state), devices
                 )
                 job["state"] = "ready"
             except asyncio.CancelledError:
@@ -155,6 +160,29 @@ def create_app(settings: Settings | None = None):
         task.add_done_callback(quality_tasks.discard)
         return JSONResponse(job.copy(), status_code=202, headers={"Cache-Control": "no-store"})
 
+    @app.get("/v1/demo/gpus")
+    async def demo_gpus():
+        editable = len(pool.workers) == 1
+        try:
+            options = await pool.gpu_options() if editable else []
+            message = "" if editable else "GPU assignments are managed by workers.yaml."
+        except Exception:
+            options, editable, message = (
+                [],
+                False,
+                "GPU discovery is unavailable; using the configured GPUs.",
+            )
+        return JSONResponse(
+            {
+                "gpus": options,
+                "editable": editable,
+                "selected": pool.demo_devices,
+                "message": message,
+                "persistent": settings.save_demo_selection is not None,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
     @app.get("/v1/demo/quality/{id}")
     async def demo_quality_status(id: str):
         if id not in quality_jobs:
@@ -167,6 +195,8 @@ def create_app(settings: Settings | None = None):
             {
                 "id": w.config.id,
                 "quality": w.config.quality,
+                "devices": list(w.config.devices),
+                "inference_ranks": w.info.get("world_size"),
                 "ready": w.ready,
                 "occupied": w.owner is not None,
             }
@@ -177,8 +207,9 @@ def create_app(settings: Settings | None = None):
                 "workers": workers,
                 "backend": settings.backend,
                 "demo_qualities": ["low", "high"]
-                if len(pool.workers) == 1 and len(pool.workers[0].config.devices) == 1
+                if len(pool.workers) == 1
                 else sorted({w.config.quality for w in pool.workers}),
+                "demo_devices": pool.demo_devices,
             },
             status_code=200 if any(w.ready for w in pool.workers) else 503,
         )

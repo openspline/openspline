@@ -18,7 +18,7 @@ def get_device(ulysses_degree, ring_degree):
             get_world_group,
         )
 
-        dist.init_process_group("nccl", timeout=datetime.timedelta(hours=24*7))
+        dist.init_process_group("nccl", timeout=datetime.timedelta(minutes=5))
         init_distributed_environment(rank=dist.get_rank(), world_size=dist.get_world_size())
         initialize_model_parallel(
             sequence_parallel_degree=dist.get_world_size(),
