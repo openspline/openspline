@@ -1,12 +1,18 @@
 import asyncio
 import base64
 import sys
+from http import HTTPStatus
 from types import SimpleNamespace as NS
 from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import WebSocketDisconnect
 from openspline_server.demo import OpenAIDemoEvents, run_demo, run_duplex
+from openspline_server.provider_errors import connection_failure, log_connection_failure
+from websockets.datastructures import Headers
+from websockets.exceptions import ConnectionClosedError, InvalidStatus
+from websockets.frames import Close
+from websockets.http11 import Response
 
 
 def server_error():
@@ -135,7 +141,11 @@ async def test_demo_provider_warning_is_delivered_without_teardown_then_disconne
     monkeypatch.setitem(
         sys.modules,
         "openai",
-        NS(AsyncOpenAI=lambda: NS(realtime=NS(connect=lambda **kwargs: connection))),
+        NS(
+            AsyncOpenAI=lambda: NS(
+                realtime=NS(connect=lambda **kwargs: connection), close=AsyncMock()
+            )
+        ),
     )
 
     async def receive():
@@ -231,11 +241,14 @@ async def test_provider_connection_failure_is_actionable_and_releases_session(
         raise ProviderFailure("private provider diagnostics")
 
     monkeypatch.setitem(
-        sys.modules, "openai", NS(AsyncOpenAI=lambda: NS(realtime=NS(connect=fail)))
+        sys.modules,
+        "openai",
+        NS(AsyncOpenAI=lambda: NS(realtime=NS(connect=fail), close=AsyncMock())),
     )
     socket = NS(
         accept=AsyncMock(),
         receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_bytes=asyncio.Event().wait,
         send_json=AsyncMock(side_effect=sent.append),
         close=AsyncMock(),
     )
@@ -246,3 +259,299 @@ async def test_provider_connection_failure_is_actionable_and_releases_session(
     assert "private provider diagnostics" not in str(sent) + caplog.text
     remove.assert_awaited_once_with(session.id)
     assert not session.publisher_connected
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429, 503])
+def test_real_websocket_handshake_errors_expose_http_status(status):
+    failure = connection_failure(
+        InvalidStatus(Response(status, "private text", Headers())), "openai"
+    )
+    assert failure["status"] == status
+    assert str(status) in failure["message"]
+    assert failure["retryable"] is (status == 503)
+    assert "private text" not in str(failure)
+
+
+@pytest.mark.parametrize(
+    "received,sent,heartbeat,retryable",
+    [
+        (1011, 1011, False, True),
+        (1008, 1008, False, False),
+        (None, 1011, True, True),
+        (None, None, False, True),
+    ],
+)
+def test_close_diagnostics_include_codes_without_private_reason(
+    caplog, received, sent, heartbeat, retryable
+):
+    exc = ConnectionClosedError(
+        Close(received, "private provider payload") if received else None,
+        Close(sent, "keepalive ping timeout" if heartbeat else "private provider payload")
+        if sent
+        else None,
+        True if received and sent else None,
+    )
+    details = log_connection_failure(exc, "openai", NS(id="test"), stage="stream")
+    assert details["received_close_code"] == received
+    assert details["sent_close_code"] == sent
+    assert details["heartbeat_timeout"] == heartbeat
+    assert details["retryable"] == retryable
+    assert "private provider payload" not in str(details) + caplog.text
+    assert "received_close=" in caplog.text
+
+
+async def test_avatar_failure_is_not_reported_or_retried_as_provider_disconnect():
+    session = make_session()
+    feed = AsyncMock(side_effect=RuntimeError("private inference details"))
+    handler = OpenAIDemoEvents(session, NS(send=AsyncMock()), feed)
+    with pytest.raises(Exception) as caught:
+        await handler.handle(audio())
+    details = connection_failure(caught.value, "openai")
+    assert "Avatar audio processing failed" in details["message"]
+    assert not details["retryable"]
+
+
+async def test_real_openai_sdk_reconnects_after_close_on_speech_without_replaying_audio(
+    monkeypatch,
+):
+    """Real SDK + local WebSocket server, including close on the first mic packet."""
+    pytest.importorskip("openai")
+    import json
+
+    from websockets.asyncio.server import serve
+
+    connections, received = [], []
+    source, sent = asyncio.Queue(), asyncio.Queue()
+    session, remove = make_session(), AsyncMock()
+    second_connected, second_audio = asyncio.Event(), asyncio.Event()
+
+    async def provider(conn):
+        index = len(connections)
+        connections.append(conn)
+        config = json.loads(await conn.recv())
+        assert config["type"] == "session.update"
+        assert config["session"]["audio"]["output"]["voice"] == "marin"
+        if index:
+            second_connected.set()
+        async for raw in conn:
+            event = json.loads(raw)
+            if event["type"] != "input_audio_buffer.append":
+                continue
+            received.append((index, base64.b64decode(event["audio"])))
+            if not index:
+                await conn.close(1011, "private provider details")
+                return
+            second_audio.set()
+            await conn.send(
+                json.dumps(
+                    {
+                        "type": "response.output_audio.delta",
+                        "event_id": "evt_audio",
+                        "response_id": "resp_test",
+                        "output_index": 0,
+                        "item_id": "item_test",
+                        "content_index": 0,
+                        "delta": base64.b64encode(bytes(4800)).decode(),
+                    }
+                )
+            )
+
+    async def microphone():
+        value = await source.get()
+        if value is None:
+            raise WebSocketDisconnect()
+        return value
+
+    socket = NS(
+        accept=AsyncMock(),
+        close=AsyncMock(),
+        send_json=sent.put,
+        receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_bytes=microphone,
+    )
+    async with serve(provider, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+        monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{port}/v1")
+        task = asyncio.create_task(run_demo(socket, session, "openai", remove))
+        try:
+            assert (await asyncio.wait_for(sent.get(), 2))["type"] == "ready"
+            # Ready must mean the provider can receive the user's first words.
+            await source.put(b"first turn")
+            warning = await asyncio.wait_for(sent.get(), 3)
+            assert warning["code"] == "provider_reconnecting"
+            assert "1011" in warning["message"]
+            assert "private provider details" not in str(warning)
+            assert session.publisher_connected
+            remove.assert_not_called()
+            session.interrupt.assert_awaited_once()
+            # Mic packets sent during reconnection must be drained and discarded.
+            await source.put(b"stale microphone audio")
+            await asyncio.wait_for(second_connected.wait(), 3)
+            status = await asyncio.wait_for(sent.get(), 2)
+            assert status["type"] == "provider_status"
+            assert "new conversation" in status["message"]
+            await source.put(b"repeated turn")
+            await asyncio.wait_for(second_audio.wait(), 2)
+            for _ in range(100):
+                if session.push.await_count:
+                    break
+                await asyncio.sleep(0.01)
+            session.push.assert_awaited_once_with(bytes(4800), {"sample_rate": 24000})
+            assert received == [(0, b"first turn"), (1, b"repeated turn")]
+            await source.put(None)
+            await asyncio.wait_for(task, 2)
+            remove.assert_awaited_once_with(session.id)
+            assert not session.publisher_connected
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.parametrize("status,attempts", [(401, 1), (503, 3)])
+async def test_real_openai_handshake_retry_limits_and_cleanup(monkeypatch, status, attempts):
+    pytest.importorskip("openai")
+    from websockets.asyncio.server import serve
+
+    accepted = []
+
+    async def reject(conn, request):
+        accepted.append(True)
+        return conn.respond(HTTPStatus(status), "private response body")
+
+    async def provider(conn):
+        pytest.fail("Handshake should be rejected")
+
+    session, sent, remove = make_session(), [], AsyncMock()
+    socket = NS(
+        accept=AsyncMock(),
+        close=AsyncMock(),
+        send_json=AsyncMock(side_effect=sent.append),
+        receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_bytes=asyncio.Event().wait,
+    )
+    async with serve(provider, "127.0.0.1", 0, process_request=reject) as server:
+        port = server.sockets[0].getsockname()[1]
+        monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+        monkeypatch.setenv("OPENAI_BASE_URL", f"http://127.0.0.1:{port}/v1")
+        await asyncio.wait_for(run_demo(socket, session, "openai", remove), 5)
+    assert len(accepted) == attempts
+    assert sent[-1]["fatal"] and str(status) in sent[-1]["message"]
+    assert "private response body" not in str(sent)
+    remove.assert_awaited_once_with(session.id)
+
+
+async def test_disconnect_during_reconnect_cancels_retry_and_releases_session(monkeypatch):
+    import openspline_server.demo as demo
+
+    attempts, sent = [], asyncio.Queue()
+    source = asyncio.Queue()
+    session, remove, closed = make_session(), AsyncMock(), AsyncMock()
+
+    def connect(**kwargs):
+        attempts.append(True)
+        raise ConnectionClosedError(None, None)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        NS(
+            AsyncOpenAI=lambda: NS(
+                realtime=NS(connect=connect),
+                close=closed,
+            )
+        ),
+    )
+    original_sleep = asyncio.sleep
+    retry_waiting = asyncio.Event()
+
+    async def wait_in_retry(delay):
+        retry_waiting.set()
+        await asyncio.Event().wait()
+
+    # Patch only the demo module's sleep, without changing asyncio globally.
+    monkeypatch.setattr(demo, "asyncio", NS(**{**vars(asyncio), "sleep": wait_in_retry}))
+
+    async def microphone():
+        await source.get()
+        raise WebSocketDisconnect()
+
+    socket = NS(
+        accept=AsyncMock(),
+        close=AsyncMock(),
+        send_json=sent.put,
+        receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_bytes=microphone,
+    )
+    task = asyncio.create_task(run_demo(socket, session, "openai", remove))
+    try:
+        await asyncio.wait_for(retry_waiting.wait(), 1)
+        assert session.publisher_connected
+        await source.put(None)
+        await asyncio.wait_for(task, 1)
+        await original_sleep(0)
+        assert len(attempts) == 1
+        closed.assert_awaited_once()
+        remove.assert_awaited_once_with(session.id)
+        assert not session.publisher_connected
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_microphone_send_failure_ends_blocked_receive_and_releases_session(monkeypatch):
+    import openspline_server.demo as demo
+
+    session, sent, remove = make_session(), [], AsyncMock()
+    connected, cancelled = asyncio.Event(), asyncio.Event()
+
+    class Connection:
+        session = NS(update=AsyncMock())
+        input_audio_buffer = NS(append=AsyncMock(side_effect=ConnectionClosedError(None, None)))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def __aiter__(self):
+            connected.set()
+            try:
+                await asyncio.Event().wait()
+                yield
+            finally:
+                cancelled.set()
+
+    monkeypatch.setattr(demo, "OPENAI_CONNECTION_ATTEMPTS", 1)
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        NS(
+            AsyncOpenAI=lambda: NS(
+                realtime=NS(connect=lambda **kwargs: Connection()),
+                close=AsyncMock(),
+            )
+        ),
+    )
+    received = False
+
+    async def microphone():
+        nonlocal received
+        await connected.wait()
+        if received:
+            await asyncio.Event().wait()
+        received = True
+        return bytes(4800)
+
+    socket = NS(
+        accept=AsyncMock(),
+        close=AsyncMock(),
+        send_json=AsyncMock(side_effect=sent.append),
+        receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_bytes=microphone,
+    )
+    await asyncio.wait_for(run_demo(socket, session, "openai", remove), 1)
+    assert cancelled.is_set()
+    assert sent[-1]["fatal"] and "1006" in sent[-1]["message"]
+    remove.assert_awaited_once_with(session.id)

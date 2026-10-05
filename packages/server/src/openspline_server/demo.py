@@ -9,8 +9,15 @@ import secrets
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .provider_errors import (
+    PROVIDER_NAMES,
+    avatar_operation,
+    connection_failure,
+    log_connection_failure,
+)
+
 logger = logging.getLogger(__name__)
-PROVIDER_NAMES = {"openai": "OpenAI Realtime", "gemini": "Gemini Live"}
+OPENAI_CONNECTION_ATTEMPTS = 3
 
 
 async def run_duplex(receive, microphone):
@@ -82,7 +89,7 @@ class OpenAIDemoEvents:
             raw = base64.b64decode(event.delta)
             self.generated += len(raw) / 48
             self.audio_pending = True
-            await self.feed(raw)
+            await avatar_operation(self.feed(raw))
             if self.warned:
                 self.warned = False
                 self.session.emit(
@@ -93,13 +100,13 @@ class OpenAIDemoEvents:
                     }
                 )
         elif event.type == "response.output_audio.done":
-            await self.session.end_turn()
+            await avatar_operation(self.session.end_turn())
             self.audio_pending = False
         elif event.type == "input_audio_buffer.speech_started":
             played = min(
                 self.generated - self.base, max(0, self.session.timeline.played / 48 - self.base)
             )
-            await self.session.interrupt()
+            await avatar_operation(self.session.interrupt())
             if self.item:
                 await self.connection.send(
                     {
@@ -118,10 +125,111 @@ class OpenAIDemoEvents:
             # A failure can be delivered only in response.done, without error.
             # Flush any partial audio once, then keep listening for another turn.
             if self.audio_pending:
-                await self.session.end_turn()
+                await avatar_operation(self.session.end_turn())
                 self.audio_pending = False
             details = event.response.status_details
             self.provider_error(getattr(details, "error", None), event.event_id, event.response.id)
+
+
+async def run_openai_demo(session, microphone, feed):
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI()
+    active_connection = send_failure = None
+
+    async def send(raw):
+        nonlocal active_connection
+        conn, failure = active_connection, send_failure
+        # Continue draining the microphone while connecting/retrying. Replaying
+        # queued speech into a fresh conversation can duplicate a user's request.
+        if conn is None:
+            return
+        try:
+            await conn.input_audio_buffer.append(audio=base64.b64encode(raw).decode())
+        except Exception as exc:
+            if conn is active_connection:
+                active_connection = None
+                if not failure.done():
+                    failure.set_result(exc)
+
+    async def connect():
+        nonlocal active_connection, send_failure
+        connected_before = False
+        for attempt in range(1, OPENAI_CONNECTION_ATTEMPTS + 1):
+            send_failure = asyncio.get_running_loop().create_future()
+            stage = "connect"
+            try:
+                async with client.realtime.connect(
+                    model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
+                ) as conn:
+                    stage = "configure"
+                    await conn.session.update(
+                        session={
+                            "type": "realtime",
+                            "instructions": "You are a friendly voice assistant. Keep answers brief.",
+                            "audio": {
+                                "input": {"format": {"type": "audio/pcm", "rate": 24000}},
+                                "output": {
+                                    "format": {"type": "audio/pcm", "rate": 24000},
+                                    "voice": "marin",
+                                },
+                            },
+                        }
+                    )
+                    active_connection = conn
+                    stage = "stream"
+                    if not connected_before:
+                        # Only enable the browser's microphone after the provider
+                        # is connected; otherwise the first spoken words get lost.
+                        session.emit({"type": "ready"})
+                    if attempt > 1:
+                        session.emit(
+                            {
+                                "type": "provider_status",
+                                "provider": "openai",
+                                "message": (
+                                    "OpenAI Realtime reconnected with a new conversation. Please repeat your last message."
+                                    if connected_before
+                                    else "OpenAI Realtime connected. Speak naturally; interrupt at any time."
+                                ),
+                            }
+                        )
+                    connected_before = True
+                    events = OpenAIDemoEvents(session, conn, feed)
+
+                    async def receive():
+                        async for event in conn:
+                            await events.handle(event)
+
+                    async def failed_send():
+                        raise await send_failure
+
+                    await run_duplex(receive(), failed_send())
+                    return
+            except Exception as exc:
+                active_connection = None
+                failure = connection_failure(exc, "openai")
+                if not failure["retryable"] or attempt == OPENAI_CONNECTION_ATTEMPTS:
+                    raise
+                log_connection_failure(exc, "openai", session, stage=stage, attempt=attempt)
+                await avatar_operation(session.interrupt())
+                session.emit(
+                    {
+                        "type": "warning",
+                        "provider": "openai",
+                        "code": "provider_reconnecting",
+                        "message": f"{failure['message']} Reconnecting ({attempt}/{OPENAI_CONNECTION_ATTEMPTS - 1})…",
+                    }
+                )
+                await asyncio.sleep(0.5 * 2 ** (attempt - 1))
+            finally:
+                active_connection = None
+                send_failure.cancel()
+
+    try:
+        await run_duplex(connect(), microphone(send))
+    finally:
+        await client.close()
 
 
 async def run_demo(ws: WebSocket, session, provider, remove):
@@ -145,7 +253,6 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                 await ws.send_json(await session.events.get())
 
         output_task = asyncio.create_task(output())
-        session.emit({"type": "ready"})
 
         async def microphone(send):
             while True:
@@ -162,37 +269,6 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                     return
                 await session.push(raw[offset : offset + rate // 5], {"sample_rate": rate})
 
-        async def openai():
-            from openai import AsyncOpenAI
-
-            async with AsyncOpenAI().realtime.connect(
-                model=os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
-            ) as conn:
-                await conn.session.update(
-                    session={
-                        "type": "realtime",
-                        "instructions": "You are a friendly voice assistant. Keep answers brief.",
-                        "audio": {
-                            "input": {"format": {"type": "audio/pcm", "rate": 24000}},
-                            "output": {
-                                "format": {"type": "audio/pcm", "rate": 24000},
-                                "voice": "marin",
-                            },
-                        },
-                    }
-                )
-
-                async def send(raw):
-                    await conn.input_audio_buffer.append(audio=base64.b64encode(raw).decode())
-
-                events = OpenAIDemoEvents(session, conn, feed)
-
-                async def receive():
-                    async for event in conn:
-                        await events.handle(event)
-
-                await run_duplex(receive(), microphone(send))
-
         async def gemini():
             from google import genai
             from google.genai import types
@@ -207,6 +283,7 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                     "system_instruction": "Be friendly and concise.",
                 },
             ) as conn:
+                session.emit({"type": "ready"})
 
                 async def send(raw):
                     await conn.send_realtime_input(
@@ -239,9 +316,20 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                     await client.aio.aclose()
 
         try:
-            await asyncio.wait_for(session.viewer_ready.wait(), 60)
+            try:
+                await asyncio.wait_for(session.viewer_ready.wait(), 60)
+            except asyncio.TimeoutError:
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "code": "playback_timeout",
+                        "fatal": True,
+                        "message": "Avatar playback did not connect. Enable playback in the browser and start a new session.",
+                    }
+                )
+                return
             if provider == "openai":
-                await openai()
+                await run_openai_demo(session, microphone, feed)
             elif provider == "gemini":
                 await gemini()
             else:
@@ -270,27 +358,8 @@ async def run_demo(ws: WebSocket, session, provider, remove):
     except WebSocketDisconnect:
         pass
     except Exception as exc:
-        status = getattr(exc, "status_code", None)
-        name = PROVIDER_NAMES.get(provider, provider)
-        if isinstance(status, int) and status >= 500:
-            message = (
-                f"{name} is temporarily unavailable. Please start a new session and try again."
-            )
-        elif status in {401, 403}:
-            message = f"{name} access was denied. Check the provider API key and model access on the server."
-        elif status == 429:
-            message = (
-                f"{name} reached a rate or quota limit. Check the provider account and retry later."
-            )
-        else:
-            message = f"{name} connection failed. Check the server's provider connection, then start a new session."
-        logger.warning(
-            "Voice demo connection failed: provider=%s avatar_session=%s exception=%s status=%s",
-            provider,
-            getattr(session, "id", None),
-            type(exc).__name__,
-            status,
-        )
+        failure = log_connection_failure(exc, provider, session, stage="demo")
+        message = failure["message"] + " Start a new session to try again."
         try:
             await ws.send_json(
                 {

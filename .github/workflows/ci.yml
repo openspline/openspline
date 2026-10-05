@@ -20,6 +20,8 @@ jobs:
       - run: sh -n install.sh && sh -n run.sh
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: uv run pytest
+      - name: Exercise voice demo with provider SDKs
+        run: uv run --all-packages --extra demo --frozen pytest tests/test_demo_provider.py
       - name: Validate NVIDIA dependency locks
         run: |
           for cuda in cu126 cu128; do
