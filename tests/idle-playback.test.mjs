@@ -15,6 +15,11 @@ test('idle video advances without audio feedback and does not replace queued spe
   assert.equal(drawn.length,1);
   assert.deepEqual(sent,[{type:'idle_played',sequence:1,epoch:0}]);
   assert.equal(player.end,0);
+  let errors=0;
+  player.addEventListener('error',()=>errors++);
+  await player.receive({type:'warning',provider:'openai',code:'server_error',message:'Please try speaking again.'});
+  assert.equal(errors,0);
+  assert.equal(player.closed,false);
   player.frames=[{at:1,image:{close(){}}}];
   await player.receive({...packet,sequence:2});
   assert.equal(drawn.length,1);

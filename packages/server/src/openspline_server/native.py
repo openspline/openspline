@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from dotenv import load_dotenv, set_key, unset_key
+from dotenv import dotenv_values, load_dotenv, set_key, unset_key
 
 from .config import Settings, WorkerConfig
 
@@ -101,6 +101,13 @@ def configure(config, *, demo=False):
     return settings
 
 
+def remove_legacy_gpu_key(path):
+    # Repeated saves normally have only OPENSPLINE_GPUS. dotenv warns on a
+    # missing key even though there is nothing left to migrate.
+    if "OPENSPLINE_GPU" in dotenv_values(path, interpolate=False):
+        unset_key(path, "OPENSPLINE_GPU")
+
+
 def save_demo_selection(path, physical_devices, quality):
     """Replace just the selection, atomically preserving credentials and other settings."""
     path = Path(path)
@@ -111,7 +118,7 @@ def save_demo_selection(path, physical_devices, quality):
         copy.write_text(path.read_text() if path.exists() else "")
         if path.exists():
             copy.chmod(path.stat().st_mode & 0o777)
-        unset_key(copy, "OPENSPLINE_GPU")
+        remove_legacy_gpu_key(copy)
         set_key(copy, "OPENSPLINE_GPUS", ",".join(map(str, physical_devices)))
         set_key(copy, "OPENSPLINE_QUALITY", quality)
         os.replace(copy, path)
@@ -169,7 +176,7 @@ def main():
             prepare(settings)
             if args.save_selection:
                 if "OPENSPLINE_GPUS" in os.environ:
-                    unset_key(".env", "OPENSPLINE_GPU")
+                    remove_legacy_gpu_key(".env")
                 for key in ("OPENSPLINE_GPUS", "OPENSPLINE_GPU", "OPENSPLINE_QUALITY"):
                     if key == "OPENSPLINE_GPU" and "OPENSPLINE_GPUS" in os.environ:
                         continue

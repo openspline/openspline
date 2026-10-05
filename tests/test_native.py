@@ -94,6 +94,18 @@ def test_demo_selection_survives_restart_without_replacing_other_settings(tmp_pa
     assert settings.workers[0].quality == "high"
 
 
+@pytest.mark.parametrize("legacy", ["", "OPENSPLINE_GPU=0\n"])
+def test_repeated_selection_saves_are_quiet(tmp_path, caplog, legacy):
+    path = tmp_path / ".env"
+    path.write_text(legacy + "OPENAI_API_KEY=keep-existing\n")
+    for devices in ([0], [0, 1], [1]):
+        save_demo_selection(path, devices, "high")
+    assert "key doesn't exist" not in caplog.text
+    assert "OPENSPLINE_GPU=" not in path.read_text()
+    assert "OPENSPLINE_GPUS='1'" in path.read_text()
+    assert "OPENAI_API_KEY=keep-existing" in path.read_text()
+
+
 @pytest.mark.parametrize("selection", ["", "0,", "0,-1", "0,0", "0,00", "all", "0,x"])
 def test_invalid_gpu_groups_rejected(tmp_path, monkeypatch, selection):
     monkeypatch.setenv("OPENSPLINE_GPUS", selection)
@@ -107,9 +119,12 @@ def test_gpu_group_cannot_replace_multiple_workers(tmp_path, monkeypatch):
         configure(workers(tmp_path, "workers: [{id: a, devices: [0]}, {id: b, devices: [1]}]"))
 
 
-def test_preparation_persists_gpu_pair_and_removes_legacy_pin(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy", ["", "OPENSPLINE_GPU=0\n"])
+def test_preparation_persists_gpu_pair_and_removes_legacy_pin(
+    tmp_path, monkeypatch, caplog, legacy
+):
     workers(tmp_path)
-    (tmp_path / ".env").write_text("OPENSPLINE_GPU=0\nOPENAI_API_KEY=keep\n")
+    (tmp_path / ".env").write_text(legacy + "OPENAI_API_KEY=keep\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENSPLINE_GPUS", "0,1")
     monkeypatch.setattr("sys.argv", ["native", "--prepare", "--save-selection"])
@@ -120,6 +135,7 @@ def test_preparation_persists_gpu_pair_and_removes_legacy_pin(tmp_path, monkeypa
     saved = (tmp_path / ".env").read_text()
     assert "OPENSPLINE_GPUS='0,1'" in saved and "OPENSPLINE_GPU=" not in saved
     assert "OPENAI_API_KEY=keep" in saved
+    assert "key doesn't exist" not in caplog.text
 
 
 def test_configured_high_group_is_retained_when_starting_low(tmp_path, monkeypatch):
