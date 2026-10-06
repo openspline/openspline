@@ -20,9 +20,13 @@ def print_install_message(install_dir: Path, console: Console | None = None) -> 
         Text("Open http://localhost:7860 after it starts (or your configured port)."),
         Text(""),
         Text("Realtime conversation (optional)", style="bold"),
-        Text.assemble("Set one or both keys in ", (str(install_dir / ".env"), "cyan"), ":"),
+        Text("Enter your OpenAI or Gemini API key in the demo."),
+        Text.assemble("Or save a fallback key in ", (str(install_dir / ".env"), "cyan"), ":"),
         Text("OPENAI_API_KEY=your_openai_key", style="cyan"),
         Text("GEMINI_API_KEY=your_gemini_key", style="cyan"),
+        Text("For ElevenLabs Agents, enter an agent ID and an optional API key in the demo."),
+        Text("ELEVENLABS_AGENT_ID=your_agent_id", style="cyan"),
+        Text("ELEVENLABS_API_KEY=your_key_for_private_agents", style="cyan"),
         Text("Restart the demo after editing .env. Audio file mode needs no key."),
     )
     console.print(Panel(message, title="openspline installation complete", border_style="green"))

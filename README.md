@@ -18,13 +18,13 @@
 
 ### Install the GPU service
 
-On a Linux x86_64 server with an NVIDIA GPU and working driver, run:
+Run the following command in a linux device/WSL2 with NVIDIA GPU:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | sh
 ```
 
-The installer creates a private Python environment and downloads the Low and High models. It does not start the service or need `sudo`. It uses GPU 0 by default. To choose another GPU:
+The installer creates a private Python environment and downloads the Low and High models. It uses GPU 0 by default. To choose another GPU:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.sh | OPENSPLINE_GPU=1 sh
@@ -36,16 +36,11 @@ curl -fsSL https://raw.githubusercontent.com/openspline/openspline/main/install.
 sh ~/.local/share/openspline/run.sh
 ```
 
-Open [http://localhost:7860](http://localhost:7860), add a portrait, choose **Audio file**, and start playback. Press Ctrl-C in the server terminal to stop the demo. You can switch between Low and High quality without downloading models again. The default single worker serves one model and session at a time.
+Open [http://localhost:7860](http://localhost:7860) to access the demo.
 
-To try realtime conversation, edit `~/.local/share/openspline/.env` and set either or both provider keys:
+Choose **OpenAI Realtime** or **Gemini Live** and enter your API key in the demo. Keys entered there stay in memory for the current page and override `OPENAI_API_KEY` or `GEMINI_API_KEY` from the server's `.env`. If a saved key is available, the field shows a masked placeholder; leave it blank to use that key. **Audio file** mode needs no API key.
 
-```dotenv
-OPENAI_API_KEY=your_openai_key
-GEMINI_API_KEY=your_gemini_key
-```
-
-Then launch or restart the demo and select **OpenAI Realtime** or **Gemini Live** as the audio source. Neither key is needed for Audio file mode.
+For **ElevenLabs Agents**, enter your agent ID. Public agents need no API key; private agents need an ElevenLabs API key with access to the agent. You can also set `ELEVENLABS_AGENT_ID` and `ELEVENLABS_API_KEY` in the server's `.env`; values entered in the demo override those defaults for the current session and are not saved.
 
 ### Python SDK
 
@@ -128,6 +123,29 @@ async with Openspline().avatar("portrait.jpg") as avatar:
 ```
 
 [Run the example](examples/python/gemini.py): `GEMINI_API_KEY=... python examples/python/gemini.py portrait.jpg`. Repeat the receive loop for subsequent turns; set `GEMINI_LIVE_MODEL` to override the model.
+
+### ElevenLabs Agents
+
+Connect an existing [ElevenLabs agent WebSocket](https://elevenlabs.io/docs/eleven-agents/api-reference/eleven-agents/websocket). No additional provider SDK is needed. Pass decoded events, including the initial metadata, so the adapter uses the agent's negotiated audio format.
+
+```python
+import json
+from openspline import Openspline
+from openspline.integrations import ElevenLabsAgents
+
+async with Openspline().avatar("portrait.jpg") as avatar:
+    print(avatar.viewer_url)
+    await avatar.wait_for_viewer()
+    adapter = ElevenLabsAgents(avatar)
+    async for message in connection:
+        event = json.loads(message)
+        await adapter.handle(event)
+        await handle_event(event)  # keep your input, pong, and tool handlers
+```
+
+The adapter supports PCM and μ-law audio, flushes final audio, and handles interruptions. It preserves transcripts and tool events for your existing handler. If attaching after connection setup, pass `audio_format="pcm_24000"` (or the negotiated format) to the constructor. Node exports `ElevenLabsAgents` from `@openspline/node/integrations`, with `await adapter.handle(event)` and an optional format as the second constructor argument.
+
+[Python example](examples/python/elevenlabs_agents.py): `ELEVENLABS_AGENT_ID=... python examples/python/elevenlabs_agents.py portrait.jpg`. [Node example](examples/node/elevenlabs_agents.mjs): `ELEVENLABS_AGENT_ID=... node examples/node/elevenlabs_agents.mjs portrait.jpg`. Set `ELEVENLABS_API_KEY` for private agents; the examples request a signed URL on the backend. Each plays one response; the demo supports microphone conversations. Configure the agent's client events to include `audio`, `interruption`, and `agent_response_complete`. Custom client tools and required dynamic variables need your application's handlers and initiation data; the demo uses the agent's saved configuration.
 
 ### Custom connector
 

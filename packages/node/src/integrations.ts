@@ -1,4 +1,5 @@
 import type { AvatarSession } from './index.js';
+export { ElevenLabsAgents } from './elevenlabs.js';
 /** Feed an event from the application's existing receive loop; never consume it twice. */
 export async function openaiRealtime(avatar:AvatarSession,event:any){
   if(event.type==='response.output_audio.delta')await avatar.sendAudio(Buffer.from(event.delta,'base64'));

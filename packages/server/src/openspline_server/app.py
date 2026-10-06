@@ -118,6 +118,12 @@ def create_app(settings: Settings | None = None):
     async def health():
         return {"status": "ok"}
 
+    @app.get("/v1/demo/providers")
+    async def demo_providers():
+        from .demo import configured_providers
+
+        return JSONResponse(configured_providers(), headers={"Cache-Control": "no-store"})
+
     @app.post("/v1/demo/quality")
     async def prepare_demo_quality(request: Request):
         body = await request.json()

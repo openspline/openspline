@@ -10,7 +10,7 @@ license = "MIT"
 dependencies = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1", "python-multipart>=0.0.20,<1", "numpy>=1.26,<3", "Pillow>=11,<13", "PyYAML>=6,<7", "aiortc>=1.14,<2", "av>=14,<17", "huggingface-hub>=0.34,<1", "rich>=15,<16"]
 [project.optional-dependencies]
 livekit = ["livekit-agents==1.8.3", "livekit-api==1.2.1"]
-demo = ["openai==2.54.0", "google-genai==1.75.0"]
+demo = ["openai==2.54.0", "google-genai==1.75.0", "httpx>=0.27,<1", "websockets>=14,<16"]
 gpu = ["torch==2.7.1", "torchvision==0.22.1", "diffusers==0.36.0", "transformers==4.57.3", "accelerate==1.10.1", "einops==0.8.1", "loguru==0.7.3", "pyloudnorm==0.1.1", "scipy>=1.14,<2", "librosa>=0.11,<1", "safetensors>=0.6,<1"]
 # Later xfuser releases probe AMD-only device properties on NVIDIA at import time.
 distributed = ["xfuser==0.4.5", "yunchang==0.6.4"]

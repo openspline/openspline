@@ -1868,7 +1868,9 @@ dependencies = [
 [package.optional-dependencies]
 demo = [
     { name = "google-genai" },
+    { name = "httpx" },
     { name = "openai" },
+    { name = "websockets" },
 ]
 distributed = [
     { name = "xfuser" },
@@ -1903,6 +1905,7 @@ requires-dist = [
     { name = "einops", marker = "extra == 'gpu'", specifier = "==0.8.1" },
     { name = "fastapi", specifier = ">=0.115,<1" },
     { name = "google-genai", marker = "extra == 'demo'", specifier = "==1.75.0" },
+    { name = "httpx", marker = "extra == 'demo'", specifier = ">=0.27,<1" },
     { name = "huggingface-hub", specifier = ">=0.34,<1" },
     { name = "librosa", marker = "extra == 'gpu'", specifier = ">=0.11,<1" },
     { name = "livekit-agents", marker = "extra == 'livekit'", specifier = "==1.8.3" },
@@ -1921,6 +1924,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'gpu'", specifier = "==0.22.1" },
     { name = "transformers", marker = "extra == 'gpu'", specifier = "==4.57.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30,<1" },
+    { name = "websockets", marker = "extra == 'demo'", specifier = ">=14,<16" },
     { name = "xfuser", marker = "extra == 'distributed'", specifier = "==0.4.5" },
     { name = "yunchang", marker = "extra == 'distributed'", specifier = "==0.6.4" },
 ]

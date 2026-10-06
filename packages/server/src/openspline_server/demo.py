@@ -1,4 +1,4 @@
-"""Optional server-owned voice demo. Provider credentials never enter the browser."""
+"""Voice demo with per-connection credentials and a server environment fallback."""
 
 import asyncio
 import base64
@@ -9,6 +9,7 @@ import secrets
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from .elevenlabs_demo import ElevenLabsDemoError, run_elevenlabs_demo
 from .provider_errors import (
     PROVIDER_NAMES,
     avatar_operation,
@@ -18,6 +19,42 @@ from .provider_errors import (
 
 logger = logging.getLogger(__name__)
 OPENAI_CONNECTION_ATTEMPTS = 3
+PROVIDER_API_KEYS = {
+    "openai": "OPENAI_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "elevenlabs": "ELEVENLABS_API_KEY",
+}
+
+
+def configured_providers():
+    # The browser only needs to know whether a fallback exists, never its value.
+    providers = {
+        provider: {"configured": bool(os.getenv(variable, "").strip())}
+        for provider, variable in PROVIDER_API_KEYS.items()
+    }
+    providers["elevenlabs"]["agent_configured"] = bool(os.getenv("ELEVENLABS_AGENT_ID", "").strip())
+    return providers
+
+
+def demo_api_key(provider, supplied):
+    if provider not in PROVIDER_API_KEYS:
+        raise ValueError("Choose OpenAI Realtime, Gemini Live, or ElevenLabs Agents.")
+    if supplied is not None and (not isinstance(supplied, str) or len(supplied) > 4096):
+        raise ValueError("Enter a valid provider API key.")
+    variable = PROVIDER_API_KEYS[provider]
+    key = (supplied or "").strip() or os.getenv(variable, "").strip()
+    if not key and provider != "elevenlabs":
+        raise ValueError(f"Enter a {PROVIDER_NAMES[provider]} API key or set {variable} in .env.")
+    return key
+
+
+def demo_agent_id(supplied):
+    if supplied is not None and (not isinstance(supplied, str) or len(supplied) > 256):
+        raise ValueError("Enter a valid ElevenLabs agent ID.")
+    agent_id = (supplied or "").strip() or os.getenv("ELEVENLABS_AGENT_ID", "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", agent_id):
+        raise ValueError("Enter an ElevenLabs agent ID or set ELEVENLABS_AGENT_ID in .env.")
+    return agent_id
 
 
 async def run_duplex(receive, microphone):
@@ -131,10 +168,10 @@ class OpenAIDemoEvents:
             self.provider_error(getattr(details, "error", None), event.event_id, event.response.id)
 
 
-async def run_openai_demo(session, microphone, feed):
+async def run_openai_demo(session, microphone, feed, api_key):
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI()
+    client = AsyncOpenAI(api_key=api_key)
     active_connection = send_failure = None
 
     async def send(raw):
@@ -248,6 +285,15 @@ async def run_demo(ws: WebSocket, session, provider, remove):
         session.publisher_connected = True
         authenticated = True
 
+        try:
+            api_key = demo_api_key(provider, auth.get("api_key"))
+            agent_id = demo_agent_id(auth.get("agent_id")) if provider == "elevenlabs" else None
+        except ValueError as exc:
+            await ws.send_json(
+                {"type": "error", "code": "configuration", "fatal": True, "message": str(exc)}
+            )
+            return
+
         async def output():
             while True:
                 await ws.send_json(await session.events.get())
@@ -273,7 +319,7 @@ async def run_demo(ws: WebSocket, session, provider, remove):
             from google import genai
             from google.genai import types
 
-            client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+            client = genai.Client(api_key=api_key)
             async with client.aio.live.connect(
                 model=os.getenv(
                     "GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025"
@@ -329,9 +375,11 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                 )
                 return
             if provider == "openai":
-                await run_openai_demo(session, microphone, feed)
+                await run_openai_demo(session, microphone, feed, api_key)
             elif provider == "gemini":
                 await gemini()
+            elif provider == "elevenlabs":
+                await run_elevenlabs_demo(session, microphone, feed, api_key, agent_id)
             else:
                 raise ValueError("Unknown demo provider")
             await ws.send_json(
@@ -343,13 +391,17 @@ async def run_demo(ws: WebSocket, session, provider, remove):
                     "fatal": True,
                 }
             )
-        except (ImportError, KeyError):
+        except ElevenLabsDemoError as exc:
+            await ws.send_json(
+                {"type": "error", "code": "configuration", "fatal": True, "message": str(exc)}
+            )
+        except ImportError:
             await ws.send_json(
                 {
                     "type": "error",
                     "code": "configuration",
                     "fatal": True,
-                    "message": "Install the optional provider SDK and configure its server-side API key.",
+                    "message": "Install the optional SDK for the selected voice provider.",
                 }
             )
         finally:

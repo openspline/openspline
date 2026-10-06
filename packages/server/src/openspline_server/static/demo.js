@@ -2,7 +2,11 @@ import{registerAvatarElement}from'./browser/element.js';registerAvatarElement();
 import{waitForPlayback}from'./playback-ready.js';
 import{prepareDemoQuality}from'./demo-quality.js';
 import{setupGpuPicker}from'./demo-gpus.js';
+import{setupDemoCredentials}from'./demo-credentials.js';
+import{setupDemoExamples}from'./demo-examples.js';
 const $=id=>document.getElementById(id);let session,ws,media,context,worklet,previewURL,playbackAbort,stopping,playbackError,providerNotice;
+setupDemoExamples($('source'),$('example-title'),$('example-description'),$('example-code'),$('example-link'),$('copy-example'),$('copy-status'));
+const credentialsReady=setupDemoCredentials(request,$('source'),$('api-key-field'),$('api-key-label'),$('api-key'),$('api-key-hint'),{container:$('agent-id-field'),input:$('agent-id'),hint:$('agent-id-hint')});
 const gpuReady=fetch('/readyz').then(r=>r.json()).then(data=>{
  $('health').textContent=data.backend==='test'?'Test backend · static portrait':data.workers.some(w=>w.ready)?'GPU ready':'Worker unavailable';
  const qualities=data.demo_qualities??data.workers.map(w=>w.quality);
@@ -14,7 +18,7 @@ $('portrait').onchange=()=>{const file=$('portrait').files[0];if(!file)return;if
 $('source').onchange=()=>{$('audio-label').hidden=$('source').value!=='file';};
 async function request(path,init={}){const r=await fetch(path,init);if(!r.ok)throw new Error((await r.json()).error?.message??r.statusText);return r.status===204?null:r.json();}
 let sequence=0;const pending=new Map();function send(type,body={}){const id=String(++sequence);return new Promise((resolve,reject)=>{pending.set(id,{resolve,reject});ws.send(JSON.stringify({type,id,...body}));});}
-function connect(path,token){return new Promise((resolve,reject)=>{
+function connect(path,token,apiKey,agentId){return new Promise((resolve,reject)=>{
  const socket=ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}${path}`);
  const fail=message=>{
   if(ws!==socket)return;
@@ -22,7 +26,7 @@ function connect(path,token){return new Promise((resolve,reject)=>{
   for(const p of pending.values())p.reject(playbackError);pending.clear();
   if(session)void stop(false);
  };
- socket.onopen=()=>socket.send(JSON.stringify({token}));
+ socket.onopen=()=>socket.send(JSON.stringify({token,api_key:apiKey,agent_id:agentId}));
  socket.onerror=()=>fail('Voice connection failed. Start a new session.');
  socket.onclose=()=>fail(playbackError?.message??'Voice connection closed. Start a new session.');
  socket.onmessage=({data})=>{
@@ -41,8 +45,11 @@ function connect(path,token){return new Promise((resolve,reject)=>{
 $('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('quality').disabled=true;$('gpu-settings').disabled=true;$('status').textContent='Preparing your avatar…';let gpuPicker;try{
  if(session)await stop(false);
  playbackError=providerNotice=null;
+ const credentials=await credentialsReady;
  const source=$('source').value,file=$('audio').files[0],quality=$('quality').value;
- gpuPicker=await gpuReady;gpuPicker.lock(true);const devices=gpuPicker.devices();
+ gpuPicker=await gpuReady;
+ const apiKey=credentials.key(source),agentId=credentials.agentId(source);
+ gpuPicker.lock(true);const devices=gpuPicker.devices();
  if(source==='file'&&!file)throw new Error('Choose an audio file.');
  const form=new FormData();form.set('portrait',$('portrait').files[0]);form.set('quality',quality);
  await prepareDemoQuality(request,quality,message=>{$('status').textContent=message;},{devices});
@@ -54,7 +61,7 @@ $('setup').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;$('qua
  const activeAvatar=$('avatar'),activeSession=session;
  activeAvatar.addEventListener('avatarerror',e=>{if(session!==activeSession||$('avatar')!==activeAvatar)return;playbackError=e.detail instanceof Error?e.detail:new Error(String(e.detail));$('status').textContent=playbackError.message;void stop(false);},{once:true});
  $('avatar').session={id:session.id,url:location.origin,token:session.token,transport:'websocket'};$('avatar').hidden=false;$('empty').hidden=true;$('portrait-preview').hidden=true;$('stop').hidden=false;
- await connect(`/v1/sessions/${session.id}/${source==='file'?'audio':'demo/'+source}`,session.publisher_token);
+ await connect(`/v1/sessions/${session.id}/${source==='file'?'audio':'demo/'+source}`,session.publisher_token,apiKey,agentId);
  await playbackReady;
  if(source==='file'){
    $('status').textContent='Generating synchronized audio and video…';const audio=new FormData();audio.set('audio',file);await request(`/v1/sessions/${session.id}/file`,{method:'POST',headers:{Authorization:`Bearer ${session.publisher_token}`},body:audio});await send('end_turn');$('status').textContent='Playback complete. Start another session to try a new voice.';

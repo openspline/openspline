@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import os
 import sys
 from http import HTTPStatus
 from types import SimpleNamespace as NS
@@ -13,6 +14,14 @@ from websockets.datastructures import Headers
 from websockets.exceptions import ConnectionClosedError, InvalidStatus
 from websockets.frames import Close
 from websockets.http11 import Response
+
+
+@pytest.fixture(autouse=True)
+def demo_credentials(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-only")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only")
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_AGENT_ID", raising=False)
 
 
 def server_error():
@@ -55,6 +64,109 @@ def make_session():
     )
     session.emit = events.put_nowait
     return session
+
+
+def test_demo_provider_status_never_returns_saved_keys(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from openspline_server.app import create_app
+    from openspline_server.config import Settings
+
+    monkeypatch.setenv("OPENAI_API_KEY", "private-saved-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "  ")
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "private-eleven-key")
+    monkeypatch.setenv("ELEVENLABS_AGENT_ID", "agent_private")
+    with TestClient(create_app(Settings(backend="test", runtime_dir=str(tmp_path)))) as client:
+        response = client.get("/v1/demo/providers")
+        assert response.json() == {
+            "openai": {"configured": True},
+            "gemini": {"configured": False},
+            "elevenlabs": {"configured": True, "agent_configured": True},
+        }
+        assert response.headers["cache-control"] == "no-store"
+        assert "private-saved-key" not in response.text
+        assert "private-eleven-key" not in response.text
+        assert "agent_private" not in response.text
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini"])
+@pytest.mark.parametrize(
+    "fallback,supplied,expected",
+    [
+        (None, "entered-key", "entered-key"),
+        ("saved-key", "  entered-key  ", "entered-key"),
+        ("saved-key", None, "saved-key"),
+        ("saved-key", "  ", "saved-key"),
+    ],
+)
+async def test_demo_passes_session_key_to_selected_sdk_without_changing_environment(
+    monkeypatch, caplog, provider, fallback, supplied, expected
+):
+    variable = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}[provider]
+    if fallback is None:
+        monkeypatch.delenv(variable)
+    else:
+        monkeypatch.setenv(variable, fallback)
+    received = []
+
+    def client(*, api_key):
+        received.append(api_key)
+        raise WebSocketDisconnect()
+
+    monkeypatch.setitem(sys.modules, "openai", NS(AsyncOpenAI=client))
+    genai = NS(Client=client, types=NS())
+    monkeypatch.setitem(sys.modules, "google", NS(genai=genai))
+    monkeypatch.setitem(sys.modules, "google.genai", genai)
+    session, remove = make_session(), AsyncMock()
+    auth = {"token": session.publisher_token}
+    if supplied is not None:
+        auth["api_key"] = supplied
+    socket = NS(
+        accept=AsyncMock(), receive_json=AsyncMock(return_value=auth), send_json=AsyncMock()
+    )
+    await run_demo(socket, session, provider, remove)
+    assert received == [expected]
+    assert os.getenv(variable) == fallback
+    assert expected not in str(socket.send_json.call_args_list) + caplog.text
+    remove.assert_awaited_once_with(session.id)
+    assert not session.publisher_connected
+
+
+@pytest.mark.parametrize("provider", ["openai", "gemini"])
+@pytest.mark.parametrize("supplied", [None, "  ", 123, {"key": "private"}, "x" * 4097])
+async def test_demo_rejects_missing_or_invalid_keys_before_waiting_for_playback(
+    monkeypatch, provider, supplied
+):
+    monkeypatch.delenv("OPENAI_API_KEY")
+    monkeypatch.delenv("GEMINI_API_KEY")
+    session, remove = make_session(), AsyncMock()
+    session.viewer_ready.clear()
+    socket = NS(
+        accept=AsyncMock(),
+        receive_json=AsyncMock(
+            return_value={"token": session.publisher_token, "api_key": supplied}
+        ),
+        send_json=AsyncMock(),
+    )
+    await asyncio.wait_for(run_demo(socket, session, provider, remove), 1)
+    error = socket.send_json.call_args.args[0]
+    assert error["fatal"] and error["code"] == "configuration"
+    assert "API key" in error["message"]
+    assert "private" not in error["message"]
+    remove.assert_awaited_once_with(session.id)
+
+
+async def test_demo_authenticates_before_accepting_provider_credentials():
+    session, remove = make_session(), AsyncMock()
+    socket = NS(
+        accept=AsyncMock(),
+        receive_json=AsyncMock(return_value={"token": "wrong", "api_key": 123}),
+        send_json=AsyncMock(),
+        close=AsyncMock(),
+    )
+    await run_demo(socket, session, "openai", remove)
+    socket.close.assert_awaited_once_with(4401)
+    socket.send_json.assert_not_called()
+    remove.assert_not_called()
 
 
 async def test_openai_error_keeps_playback_alive_and_later_audio_recovers(caplog):
@@ -142,7 +254,7 @@ async def test_demo_provider_warning_is_delivered_without_teardown_then_disconne
         sys.modules,
         "openai",
         NS(
-            AsyncOpenAI=lambda: NS(
+            AsyncOpenAI=lambda **kwargs: NS(
                 realtime=NS(connect=lambda **kwargs: connection), close=AsyncMock()
             )
         ),
@@ -243,7 +355,7 @@ async def test_provider_connection_failure_is_actionable_and_releases_session(
     monkeypatch.setitem(
         sys.modules,
         "openai",
-        NS(AsyncOpenAI=lambda: NS(realtime=NS(connect=fail), close=AsyncMock())),
+        NS(AsyncOpenAI=lambda **kwargs: NS(realtime=NS(connect=fail), close=AsyncMock())),
     )
     socket = NS(
         accept=AsyncMock(),
@@ -409,13 +521,17 @@ async def test_real_openai_sdk_reconnects_after_close_on_speech_without_replayin
 
 
 @pytest.mark.parametrize("status,attempts", [(401, 1), (503, 3)])
-async def test_real_openai_handshake_retry_limits_and_cleanup(monkeypatch, status, attempts):
+@pytest.mark.parametrize("api_key", [None, "entered-test-only"])
+async def test_real_openai_handshake_retry_limits_and_cleanup(
+    monkeypatch, status, attempts, api_key
+):
     pytest.importorskip("openai")
     from websockets.asyncio.server import serve
 
     accepted = []
 
     async def reject(conn, request):
+        assert request.headers["Authorization"] == f"Bearer {api_key or 'test-only'}"
         accepted.append(True)
         return conn.respond(HTTPStatus(status), "private response body")
 
@@ -427,7 +543,7 @@ async def test_real_openai_handshake_retry_limits_and_cleanup(monkeypatch, statu
         accept=AsyncMock(),
         close=AsyncMock(),
         send_json=AsyncMock(side_effect=sent.append),
-        receive_json=AsyncMock(return_value={"token": session.publisher_token}),
+        receive_json=AsyncMock(return_value={"token": session.publisher_token, "api_key": api_key}),
         receive_bytes=asyncio.Event().wait,
     )
     async with serve(provider, "127.0.0.1", 0, process_request=reject) as server:
@@ -456,7 +572,7 @@ async def test_disconnect_during_reconnect_cancels_retry_and_releases_session(mo
         sys.modules,
         "openai",
         NS(
-            AsyncOpenAI=lambda: NS(
+            AsyncOpenAI=lambda **kwargs: NS(
                 realtime=NS(connect=connect),
                 close=closed,
             )
@@ -528,7 +644,7 @@ async def test_microphone_send_failure_ends_blocked_receive_and_releases_session
         sys.modules,
         "openai",
         NS(
-            AsyncOpenAI=lambda: NS(
+            AsyncOpenAI=lambda **kwargs: NS(
                 realtime=NS(connect=lambda **kwargs: Connection()),
                 close=AsyncMock(),
             )

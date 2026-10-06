@@ -9,7 +9,11 @@ import traceback
 from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidProxy, ProxyError
 
 logger = logging.getLogger(__name__)
-PROVIDER_NAMES = {"openai": "OpenAI Realtime", "gemini": "Gemini Live"}
+PROVIDER_NAMES = {
+    "openai": "OpenAI Realtime",
+    "gemini": "Gemini Live",
+    "elevenlabs": "ElevenLabs Agents",
+}
 
 
 class AvatarProcessingError(Exception):
@@ -55,11 +59,16 @@ def connection_failure(exc, provider):
     elif any(isinstance(error, (InvalidProxy, ProxyError)) for error in chain):
         message = f"{name} could not connect through the server's proxy. Check its proxy settings."
     elif status in {401, 403}:
-        message = f"{name} access was denied (HTTP {status}). Check the provider API key and model access on the server."
+        message = f"{name} access was denied (HTTP {status}). Check your provider API key and model access."
     elif status == 429:
         message = f"{name} reached a rate or quota limit (HTTP 429). Check the provider account and retry later."
     elif status in {400, 404}:
-        message = f"{name} rejected the connection (HTTP {status}). Check the configured model and API base URL."
+        settings = (
+            "agent ID and agent access"
+            if provider == "elevenlabs"
+            else "configured model and API base URL"
+        )
+        message = f"{name} rejected the connection (HTTP {status}). Check the {settings}."
     elif status is not None and status >= 500:
         message = f"{name} is temporarily unavailable (HTTP {status})."
         retryable = True

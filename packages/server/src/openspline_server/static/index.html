@@ -1,12 +1,83 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>openspline · Give your agent a face</title><link rel="stylesheet" href="/static/style.css"></head><body>
-<header><a class="brand" href="/">✳ openspline</a><span class="header-note">OPEN SOURCE · REALTIME AVATARS</span><a href="/docs" class="text-link">API reference ↗</a></header>
-<main><section class="intro"><div class="eyebrow">YOUR VOICE AGENT, NOW VISIBLE</div><h1>A voice.<br>A face.<br><em>A connection.</em></h1><p>Bring your existing agent to life with a portrait and its audio. Your voice, your stack, your GPU.</p><div class="code"><span>PYTHON / FIVE LINES</span><pre>from openspline import Openspline
-client = Openspline()
-async with client.avatar("face.jpg") as avatar:
-    print(avatar.viewer_url)
-    await avatar.stream(agent.audio_stream())</pre></div><div class="compat">OpenAI <b>·</b> Gemini <b>·</b> LiveKit <b>·</b> Pipecat <b>·</b> Your agent</div></section>
-<section class="studio" aria-label="Avatar studio"><div class="studio-head"><span>PLAYGROUND</span><span class="chip" id="health">Checking service</span></div><div class="preview" id="preview"><div class="empty" id="empty"><span class="face">◡</span><h2>Meet your next interface.</h2><p>Add a portrait to get started.</p></div><openspline-avatar id="avatar" hidden></openspline-avatar><img id="portrait-preview" alt="Selected portrait" hidden></div>
-<form id="setup"><div class="row"><label class="upload" for="portrait"><span>01</span><strong>Choose a portrait</strong><small>JPG, PNG or WebP · up to 10 MB</small><input id="portrait" type="file" accept="image/jpeg,image/png,image/webp" required></label></div><div class="row split"><label>Quality<select id="quality"><option value="low">Low · faster generation</option><option value="high">High · more detail</option></select></label><label>Audio source<select id="source"><option value="file">Audio file</option><option value="openai">OpenAI Realtime</option><option value="gemini">Gemini Live</option></select></label></div>
-<fieldset id="gpu-settings" disabled aria-describedby="gpu-hint"><legend>GPUs</legend><div id="gpu-list"></div><p id="gpu-hint" class="hint">Discovering GPUs…</p></fieldset>
-<label id="audio-label">02 · Generated audio<input id="audio" type="file" accept="audio/*"></label><button id="start" class="primary" type="submit">Bring it to life <span>↗</span></button><button id="stop" type="button" class="secondary" hidden>End session</button><p id="status" role="status" aria-live="polite">A single portrait is all you need.</p></form></section></main>
-<footer><span>Built for the agents you already have.</span><span>SELF-HOSTED. YOURS TO BUILD ON.</span></footer><script type="module" src="/static/demo.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>openspline demo</title>
+  <link rel="stylesheet" href="/static/style.css?v=2">
+</head>
+<body>
+  <header>
+    <h1><a href="/">openspline</a> <span>demo</span></h1>
+    <a href="/docs">API reference</a>
+  </header>
+  <main>
+    <section class="studio" aria-label="Avatar demo">
+      <p id="health" class="hint" role="status">Checking service…</p>
+      <div class="preview" id="preview">
+        <div class="empty" id="empty">Upload a portrait to preview it.</div>
+        <openspline-avatar id="avatar" hidden></openspline-avatar>
+        <img id="portrait-preview" alt="Selected portrait" hidden>
+      </div>
+      <form id="setup">
+        <label for="portrait">Portrait
+          <input id="portrait" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="portrait-hint" required>
+          <span id="portrait-hint" class="hint">JPG, PNG or WebP · up to 10 MB</span>
+        </label>
+        <div class="split">
+          <label>Quality
+            <select id="quality">
+              <option value="low">Low</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+          <label>Audio source
+            <select id="source">
+              <option value="file">Audio file</option>
+              <option value="openai">OpenAI Realtime</option>
+              <option value="gemini">Gemini Live</option>
+              <option value="elevenlabs">ElevenLabs Agents</option>
+            </select>
+          </label>
+        </div>
+        <label id="agent-id-field" hidden>ElevenLabs agent ID
+          <input id="agent-id" type="text" maxlength="256" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="agent-id-hint" disabled>
+          <span id="agent-id-hint" class="hint"></span>
+        </label>
+        <label id="api-key-field" hidden>
+          <span id="api-key-label">API key</span>
+          <input id="api-key" type="password" maxlength="4096" autocomplete="off" autocapitalize="none" spellcheck="false" aria-labelledby="api-key-label" aria-describedby="api-key-hint" disabled>
+          <span id="api-key-hint" class="hint"></span>
+        </label>
+        <fieldset id="gpu-settings" disabled aria-describedby="gpu-hint">
+          <legend>GPUs</legend>
+          <div id="gpu-list"></div>
+          <p id="gpu-hint" class="hint">Discovering GPUs…</p>
+        </fieldset>
+        <label id="audio-label">Audio file
+          <input id="audio" type="file" accept="audio/*">
+        </label>
+        <div class="actions">
+          <button id="start" class="primary" type="submit">Start demo</button>
+          <button id="stop" type="button" hidden>End session</button>
+        </div>
+        <p id="status" class="hint" role="status" aria-live="polite">Choose a portrait and audio source.</p>
+      </form>
+    </section>
+    <section class="example" aria-labelledby="example-title">
+      <div class="example-heading">
+        <h2 id="example-title">Custom audio</h2>
+        <button id="copy-example" type="button">Copy code</button>
+      </div>
+      <p id="example-description" class="hint">Play an audio file, or stream PCM from your own agent.</p>
+      <pre tabindex="0" aria-label="Python connector example"><code id="example-code"></code></pre>
+      <div class="example-footer">
+        <span>Python</span>
+        <a id="example-link" href="https://github.com/openspline/openspline/blob/main/examples/python/universal.py" target="_blank" rel="noopener noreferrer">Full example</a>
+      </div>
+      <p id="copy-status" class="hint" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script type="module" src="/static/demo.js?v=2"></script>
+</body>
+</html>
