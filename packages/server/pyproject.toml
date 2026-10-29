@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 [project]
 name = "openspline-server"
-version = "0.1.1"
+version = "0.1.2"
 description = "Self-hosted GPU runtime for openspline"
 requires-python = ">=3.10,<3.13"
 license = "MIT"

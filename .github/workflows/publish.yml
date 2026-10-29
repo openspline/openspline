@@ -23,10 +23,12 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: uv sync --all-packages --frozen && npm ci && npm run build && uv run pytest && npm test
       - if: inputs.target == 'python'
-        run: uv build --all-packages && uv publish
+        run: |
+          uv build --all-packages --out-dir dist/python
+          uv publish --check-url https://pypi.org/simple 'dist/python/*'
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
       - if: inputs.target == 'npm'
-        run: npm publish --workspaces --access public
+        run: node scripts/publish-npm.mjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
