@@ -243,7 +243,6 @@ LiveKit, Pipecat, and TEN accept `background` on their avatar session or process
 ## Choose a connector
 
 Source: `connectors/overview.mdx`
-
 OpenSpline replaces your agent's speaker output with an avatar. Keep provider credentials on your backend, and disable the previous speaker output to avoid double playback.
 
 | Your agent | Start here |
@@ -251,7 +250,7 @@ OpenSpline replaces your agent's speaker output with an avatar. Keep provider cr
 | Any TTS or PCM audio stream | [Python SDK](/sdk/python) or [Node SDK](/sdk/node) |
 | OpenAI Realtime API | [OpenAI Realtime](/connectors/openai-realtime) |
 | OpenAI Agents SDK | [OpenAI Agents](/connectors/openai-agents) |
-| LiveKit Agents | [LiveKit](/connectors/livekit) |
+| LiveKit Agents (Python and Node) | [LiveKit plugins and demos](/connectors/livekit) |
 | Gemini Live | [Gemini Live](/connectors/gemini) |
 | ElevenLabs Agents | [ElevenLabs Agents](/connectors/elevenlabs) |
 | Pipecat, Google ADK, Vocode, TEN | [Other integrations](/connectors/other) |
@@ -324,28 +323,144 @@ async with Openspline().avatar("portrait.jpg") as avatar:
 
 Source: `connectors/livekit.mdx`
 
-```bash
-pip install 'livekit-agents[openai]==1.8.3' openspline
-```
+<img src="/images/openspline.png" alt="OpenSpline" width="64" height="64" />
 
-Start the avatar before your agent session. Your normal LiveKit frontend receives the avatar.
+Add an avatar to your existing LiveKit agent in three lines. OpenSpline publishes synchronized video and speech into your LiveKit room. Keep your models, voice, tools, and frontend.
 
+<Tabs>
+<Tab title="Python">
 ```python
-from openspline import Openspline
-from openspline.integrations.livekit import AvatarSession
+from livekit.plugins import openspline
 
-avatar = AvatarSession("portrait.jpg", client=Openspline(quality="low"))
-await avatar.start(agent_session, room=ctx.room)
-await agent_session.start(room=ctx.room, agent=agent)
+avatar = openspline.AvatarSession(avatar_id="YOUR_AVATAR_ID")
+await avatar.start(session, room=ctx.room)
 ```
+</Tab>
+<Tab title="Node.js">
+```typescript
+import * as openspline from '@livekit/agents-plugin-openspline';
+
+const avatar = new openspline.AvatarSession({ avatarId: 'YOUR_AVATAR_ID' });
+await avatar.start(session, ctx.room);
+```
+</Tab>
+</Tabs>
+
+Start the avatar **before** `session.start()`. `avatar.start()` waits for the worker to publish video, so the first words have a face. Your voice provider still determines what the agent says and how it sounds; a saved avatar supplies its portrait and background, not its conversation or TTS configuration.
+
+## Demos
+
+Recorded from the Python plugin’s room tracks with LiveKit Egress, using High quality and each avatar's assigned voice synthesized with ElevenLabs Eleven v4 (`eleven_v4`). These are the actual LiveKit worker tracks. Enable sound to hear the speech; caption files are linked beneath each video.
+
+{/* Each demo is self-contained so it can be removed independently. */}
+### Professor Nikolaev
+
+Jay Wayne — Wise University Professor
+
+<video controls playsInline preload="metadata" poster="/videos/livekit/professor-nikolaev.jpg" style={{ width: "100%", maxWidth: "512px", borderRadius: "12px" }}>
+  <source src="/videos/livekit/professor-nikolaev.mp4" type="video/mp4" />
+</video>
+
+
+### News-anchor
+
+Kanika — Confident News Anchor
+
+<video controls playsInline preload="metadata" poster="/videos/livekit/news-anchor.jpg" style={{ width: "100%", maxWidth: "512px", borderRadius: "12px" }}>
+  <source src="/videos/livekit/news-anchor.mp4" type="video/mp4" />
+</video>
+
+
+### Meera
+
+Zara — Soft, Professional and Gentle
+
+<video controls playsInline preload="metadata" poster="/videos/livekit/meera.jpg" style={{ width: "100%", maxWidth: "512px", borderRadius: "12px" }}>
+  <source src="/videos/livekit/meera.mp4" type="video/mp4" />
+</video>
+
+
+
+
+## Installation
+
+Install the plugin in your LiveKit agent project:
+
+<Tabs>
+<Tab title="Python">
+```bash
+uv add "livekit-plugins-openspline~=0.1.0"
+```
+Requires Python 3.10–3.12.
+</Tab>
+<Tab title="Node.js">
+```bash
+pnpm add @livekit/agents-plugin-openspline
+```
+Requires Node.js 20 or later.
+</Tab>
+</Tabs>
+
+## Configure and run
+
+Create an OpenSpline key and copy an owned avatar's ID from [Developers](https://dashboard.openspline.dev/developers). An avatar's public URL path is different from its ID. Add these backend-only settings to your agent project's `.env` file:
 
 ```bash
-PORTRAIT=portrait.jpg python examples/python/livekit_agent.py dev
+OPENSPLINE_API_KEY=your-openspline-key
+OPENSPLINE_AVATAR_ID=your-avatar-id
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your-livekit-key
+LIVEKIT_API_SECRET=your-livekit-secret
+OPENAI_API_KEY=your-openai-key
 ```
 
-Set `OPENAI_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` for the runnable example.
+For a new agent, follow the [LiveKit Voice AI quickstart](https://docs.livekit.io/agents/start/voice-ai/), then add the three-line avatar setup above before `session.start()`. The `OPENAI_API_KEY` setting is needed only when using OpenAI.
 
-[Python example](https://github.com/openspline/openspline/blob/main/examples/python/livekit_agent.py) · [Node example](https://github.com/openspline/openspline/blob/main/examples/node/livekit_agent.mjs)
+See the complete OpenAI Realtime agent examples: [Python](https://github.com/livekit/agents/blob/main/examples/avatar/openspline_avatar.py) · [Node.js](https://github.com/livekit/agents-js/blob/main/examples/src/openspline_avatar.ts).
+
+Connect using the [LiveKit Agent Console](https://docs.livekit.io/agents/start/console/) or a [frontend starter app](https://docs.livekit.io/frontends/start/). In React, `useVoiceAssistant()` associates the avatar's audio/video tracks with your agent. No OpenSpline viewer or second audio player is needed.
+
+## Use a portrait or your own GPU
+
+A portrait works on Cloud with your key, or against a [self-hosted service](/get-started/self-host) with the key unset:
+
+<Tabs>
+<Tab title="Python">
+```python
+avatar = openspline.AvatarSession(portrait="portrait.jpg", quality="high")
+await avatar.start(session, room=ctx.room)
+```
+</Tab>
+<Tab title="Node.js">
+```typescript
+const avatar = new openspline.AvatarSession({ portrait: 'portrait.jpg', quality: 'high' });
+await avatar.start(session, ctx.room);
+```
+</Tab>
+</Tabs>
+
+Unset `OPENSPLINE_API_KEY` for self-hosting. `OPENSPLINE_URL` defaults to `http://localhost:7860` without a key and to the Cloud API with a key. For the runnable examples, unset `OPENSPLINE_AVATAR_ID` and set `PORTRAIT` to your file path. Cloud requires a publicly reachable `wss://` LiveKit server.
+
+## Options and lifecycle
+
+| Python / Node option | Purpose |
+| --- | --- |
+| `avatar_id` / `avatarId` | Owned saved Cloud avatar ID; requires a Cloud key |
+| `portrait` | Image file path or bytes; supply this or an avatar ID |
+| `quality` | `low` by default; `high` for High quality |
+| `background` | Optional image/video path or bytes; overrides the saved background |
+| `api_key` / `apiKey`, `url` | OpenSpline credentials and service address; defaults to `OPENSPLINE_*` |
+| `client` | Existing OpenSpline client; use instead of `api_key`/`apiKey` and `url` |
+| `livekit_url` / `livekitUrl` | LiveKit server address; defaults to `LIVEKIT_URL` |
+| `livekit_api_key` / `livekitApiKey` | Defaults to `LIVEKIT_API_KEY` |
+| `livekit_api_secret` / `livekitApiSecret` | Defaults to `LIVEKIT_API_SECRET` |
+| `join_timeout` / `joinTimeout` | Video publication timeout after preparation: 30 seconds / 30000 milliseconds |
+
+LiveKit closes the avatar at job shutdown. Outside a job, call `await avatar.aclose()` in `finally`. Create a new `AvatarSession` for each call. For longer GPU cold starts, inject an OpenSpline client with a larger `timeout` (seconds in Python, milliseconds in Node).
+
+The worker is an agent participant with `lk.publish_on_behalf` pointing to your agent. Interruption and playback acknowledgements travel over LiveKit; the avatar reports standard join and playback metrics. Only the avatar plays the speech, avoiding duplicate room audio.
+
+Existing `openspline.integrations.livekit` and `@openspline/node/livekit` imports remain supported. Their legacy `url`, `api_key`/`apiKey`, and `api_secret`/`apiSecret` arguments refer to **LiveKit**; configure OpenSpline through their `client` argument.
 
 ## Gemini Live
 

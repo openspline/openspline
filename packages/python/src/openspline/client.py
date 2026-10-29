@@ -325,6 +325,16 @@ class AvatarSession:
             await self._media.start()
         return self._media
 
+    async def attach_livekit(self, *, url: str, token: str, sender_identity: str):
+        """Publish this avatar in a LiveKit room using a room-scoped worker token."""
+        response = await self.http.post(
+            f"/v1/sessions/{self.id}/livekit",
+            headers=self._headers(),
+            json={"url": url, "token": token, "sender_identity": sender_identity},
+        )
+        self._check(response)
+        return response.json()
+
     async def close(self):
         if self._closed:
             return

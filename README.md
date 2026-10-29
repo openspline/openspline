@@ -141,20 +141,27 @@ async with Openspline().avatar("portrait.jpg") as avatar:
 </details>
 
 <details>
-<summary>LiveKit</summary>
+<summary>LiveKit (Python and Node)</summary>
 
-Install `pip install 'livekit-agents[openai]==1.8.3'`. Add the avatar before starting your existing `AgentSession`; playback uses your normal LiveKit frontend.
+The experimental LiveKit plugins support saved Cloud avatars and portrait uploads. Start the avatar before your existing agent session; your normal LiveKit frontend receives synchronized audio/video.
 
 ```python
-from openspline import Openspline
-from openspline.integrations.livekit import AvatarSession
+from livekit.plugins import openspline
 
-avatar = AvatarSession("portrait.jpg", client=Openspline(quality="low"))
+avatar = openspline.AvatarSession(avatar_id="YOUR_AVATAR_ID")
 await avatar.start(agent_session, room=ctx.room)
-await agent_session.start(room=ctx.room, agent=agent)
 ```
 
-[Run the example](examples/python/livekit_agent.py): `PORTRAIT=portrait.jpg python examples/python/livekit_agent.py dev`. Set `OPENAI_API_KEY`, `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET`. The native service includes LiveKit support.
+```ts
+import * as openspline from '@livekit/agents-plugin-openspline';
+
+const avatar = new openspline.AvatarSession({ avatarId: 'YOUR_AVATAR_ID' });
+await avatar.start(agentSession, ctx.room);
+```
+
+[Installation, complete examples, and recorded demos](docs/connectors/livekit.mdx) · [LiveKit integration guide](https://docs.livekit.io/agents/models/avatar/plugins/openspline/).
+
+Set `OPENSPLINE_API_KEY` and your `LIVEKIT_*` credentials. For self-hosting, unset the Cloud key and use a `portrait` instead. Existing SDK integration imports remain supported.
 
 </details>
 

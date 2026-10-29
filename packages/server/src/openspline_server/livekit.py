@@ -25,10 +25,16 @@ class LiveKitSink:
             audio_source=self.audio, video_source=self.video, video_fps=25, video_queue_size_ms=100
         )
         await self.room.local_participant.publish_track(
-            rtc.LocalAudioTrack.create_audio_track("avatar_audio", self.audio)
+            rtc.LocalAudioTrack.create_audio_track("avatar_audio", self.audio),
+            rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE, dtx=False),
         )
         await self.room.local_participant.publish_track(
-            rtc.LocalVideoTrack.create_video_track("avatar_video", self.video)
+            rtc.LocalVideoTrack.create_video_track("avatar_video", self.video),
+            rtc.TrackPublishOptions(
+                source=rtc.TrackSource.SOURCE_CAMERA,
+                video_encoding=rtc.VideoEncoding(max_framerate=25, max_bitrate=800_000),
+                simulcast=False,
+            ),
         )
         self.receiver = DataStreamAudioReceiver(self.room, sender_identity=sender_identity)
         await self.receiver.start()

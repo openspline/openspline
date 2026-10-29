@@ -18,4 +18,7 @@ artifacts/private/
 .venvs/
 .cache/
 .tools/
+artifacts/
+# Local web research cache
+.firecrawl/
 experiments/

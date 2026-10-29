@@ -1,0 +1,217 @@
+{
+  "reference": "https://static.livekit.io/video/docs-avatar-demos/demo-anam-expressive.mp4",
+  "transcription_model": "scribe_v2",
+  "text": "Here's the range. When it's just the facts, I keep things calm, clear, and easy to follow. But when there's a win worth celebrating, ha, I can bring some serious energy. And when a moment really matters, I slow all the way down and I give it the weight it deserves.",
+  "capture": "LiveKit remote audio/video tracks; 25 fps H.264/AAC with only initial/final idle trimmed, without retiming",
+  "avatars": [
+    {
+      "slug": "professor-nikolaev",
+      "name": "Professor Nikolaev",
+      "voiceId": "8Ln42OXYupYsag45MAUy",
+      "voiceName": "Jay Wayne - Wise University Professor",
+      "stability": 0.5,
+      "similarity": 0.8,
+      "speed": 1,
+      "quality": "high",
+      "duration_seconds": 17.72,
+      "width": 512,
+      "height": 512,
+      "sha256": "e7823dfe969a52991a7aee644840b0a5f5a3a34536232a7fff147d54a807ef34",
+      "transcribed_text": "Here's the range. When it's just the facts, I keep things calm, clear, and easy to follow. But when there's a win worth celebrating, I can bring some serious energy. And when a moment really matters, I slow all the way down, and I give it the weight it deserves",
+      "tts_model": "eleven_v4",
+      "source_audio_sha256": "124dc44b57ad22b5529a65bb8c534b40756d675771eac80d72c15f2fb992530c",
+      "exact_words_match": false,
+      "join_seconds": 9.177706634014612,
+      "plugin_language": "python",
+      "hosting": "self-hosted temporary GPU",
+      "gpu": "H200",
+      "metrics": [
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793297701.3816204,
+          "playback_latency": 0.0,
+          "session_started_time": 1793297693.5607274,
+          "avatar_joined_time": 1793297701.3816204,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        },
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793297729.2489736,
+          "playback_latency": 2.493194341659546,
+          "session_started_time": null,
+          "avatar_joined_time": null,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        }
+      ],
+      "capture": "LiveKit TrackComposite Egress",
+      "timing_verification": {
+        "source_seconds": 17.28,
+        "captured_seconds": 17.728,
+        "matched_windows": 55,
+        "attempted_windows": 55,
+        "audio_offset_seconds": 0.23775,
+        "audio_offset_range_seconds": 0.0005000000000000004,
+        "coarse_audio_offset_range_seconds": 0.00037499999999998646,
+        "dimensions": [
+          [
+            512,
+            512
+          ]
+        ],
+        "speech_frames": 432,
+        "average_frame_rate": 24.999999999999996,
+        "max_frame_gap_seconds": 0.0400000000000027,
+        "frame_gap_p95_seconds": 0.040000000000000924,
+        "longest_still_seconds": 0.0,
+        "passed": true,
+        "failures": []
+      }
+    },
+    {
+      "slug": "news-anchor",
+      "name": "news-anchor",
+      "voiceId": "y2H4TwIU5I2L0JXOdBeX",
+      "voiceName": "Kanika \u2013 Confident News Anchor",
+      "stability": 0.5,
+      "similarity": 0.8,
+      "speed": 1,
+      "quality": "high",
+      "duration_seconds": 17.96,
+      "width": 512,
+      "height": 512,
+      "sha256": "e9c8c48aab42b321d20f89a23453cc5ec05decab4443eb7d4f5afa3d32ddbdb0",
+      "transcribed_text": "Here's the range. When it's just the facts, I keep things calm, clear, and easy to follow. But when there's a win worth celebrating, I can bring some serious energy. And when a moment really matters, I slow all the way down and I give it the weight it deserves.",
+      "tts_model": "eleven_v4",
+      "source_audio_sha256": "d62f59776087c5d32bf8a7ffb06c7d2ea3900731c66b66a07f76bd315a2e07e5",
+      "exact_words_match": false,
+      "join_seconds": 10.960543574998155,
+      "plugin_language": "python",
+      "hosting": "self-hosted temporary GPU",
+      "gpu": "H200",
+      "metrics": [
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793205620.1781955,
+          "playback_latency": 0.0,
+          "session_started_time": 1793205609.3358035,
+          "avatar_joined_time": 1793205620.1781955,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        },
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793205650.697715,
+          "playback_latency": 2.172844886779785,
+          "session_started_time": null,
+          "avatar_joined_time": null,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        }
+      ],
+      "capture": "LiveKit TrackComposite Egress",
+      "timing_verification": {
+        "source_seconds": 17.52,
+        "captured_seconds": 17.96275,
+        "matched_windows": 59,
+        "attempted_windows": 59,
+        "audio_offset_seconds": 0.20775,
+        "audio_offset_range_seconds": 0.03925000000000001,
+        "coarse_audio_offset_range_seconds": 0.035250000000000004,
+        "dimensions": [
+          [
+            512,
+            512
+          ]
+        ],
+        "speech_frames": 438,
+        "average_frame_rate": 25.0,
+        "max_frame_gap_seconds": 0.0400000000000027,
+        "frame_gap_p95_seconds": 0.040000000000000924,
+        "longest_still_seconds": 0.0,
+        "passed": true,
+        "failures": []
+      }
+    },
+    {
+      "slug": "meera",
+      "name": "Meera",
+      "voiceId": "OtEfb2LVzIE45wdYe54M",
+      "voiceName": "Zara - Soft, Professional and Gentle",
+      "stability": 1,
+      "similarity": 0.8,
+      "speed": 1,
+      "quality": "high",
+      "duration_seconds": 17.96,
+      "width": 512,
+      "height": 512,
+      "sha256": "8d64e22257175188f068519ea09e72f000cdc639d7425da46aff545554987df6",
+      "transcribed_text": "Here's the range. When it's just the facts, I keep things calm, clear, and easy to follow. But when there's a win worth celebrating, I can bring some serious energy. And when a moment really matters, I slow all the way down, and I give it the weight it deserves.",
+      "tts_model": "eleven_v4",
+      "source_audio_sha256": "c99f9aca3e0dfdef97a0dcf5a0c60c65caed1d15bce61a994ab72c0f8ab34890",
+      "exact_words_match": false,
+      "join_seconds": 3.2644013310055016,
+      "plugin_language": "python",
+      "hosting": "self-hosted temporary GPU",
+      "gpu": "H200",
+      "metrics": [
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793204904.6114123,
+          "playback_latency": 0.0,
+          "session_started_time": 1793204901.550685,
+          "avatar_joined_time": 1793204904.6114123,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        },
+        {
+          "type": "avatar_metrics",
+          "timestamp": 1793204929.3376749,
+          "playback_latency": 1.9805667400360107,
+          "session_started_time": null,
+          "avatar_joined_time": null,
+          "metadata": {
+            "model_name": null,
+            "model_provider": "openspline"
+          }
+        }
+      ],
+      "capture": "LiveKit TrackComposite Egress",
+      "timing_verification": {
+        "source_seconds": 17.52,
+        "captured_seconds": 17.96275,
+        "matched_windows": 55,
+        "attempted_windows": 55,
+        "audio_offset_seconds": 0.202625,
+        "audio_offset_range_seconds": 0.015000000000000013,
+        "coarse_audio_offset_range_seconds": 0.015000000000000013,
+        "dimensions": [
+          [
+            512,
+            512
+          ]
+        ],
+        "speech_frames": 438,
+        "average_frame_rate": 25.0,
+        "max_frame_gap_seconds": 0.0400000000000027,
+        "frame_gap_p95_seconds": 0.040000000000000924,
+        "longest_still_seconds": 0.040000000000000924,
+        "passed": true,
+        "failures": []
+      }
+    }
+  ],
+  "tts_model": "eleven_v4",
+  "speech_verification": "All TTS requests received the identical reference text. Per-avatar transcriptions and exact_words_match record verification of the final LiveKit recordings."
+}
