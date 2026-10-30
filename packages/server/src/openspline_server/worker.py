@@ -510,16 +510,18 @@ class WorkerPool:
         if worker.owner != owner:
             return
         try:
-            if worker.ready:
-                await worker.call("reset")
-        except WorkerFailure:
-            pass
-        if not worker.ready:
-            await worker.stop()
-            await worker.start()
-        async with self.lock:
-            if worker.owner == owner:
-                worker.owner = None
+            try:
+                if worker.ready:
+                    await worker.call("reset")
+            except WorkerFailure:
+                pass
+            if not worker.ready:
+                await worker.stop()
+                await worker.start()
+        finally:
+            async with self.lock:
+                if worker.owner == owner:
+                    worker.owner = None
 
     async def close(self):
         tasks = [w.recovering for w in self.workers if getattr(w, "recovering", None)]
