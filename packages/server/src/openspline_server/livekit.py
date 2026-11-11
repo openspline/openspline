@@ -2,6 +2,7 @@
 
 import asyncio
 import time
+from contextlib import AsyncExitStack
 
 from livekit import rtc
 from livekit.agents.voice.avatar import AudioSegmentEnd, DataStreamAudioReceiver
@@ -129,15 +130,12 @@ class LiveKitSink:
             tick += 1
 
     async def close(self):
-        for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        if hasattr(self, "receiver"):
-            await self.receiver.aclose()
-        if hasattr(self, "sync"):
-            await self.sync.aclose()
-        if hasattr(self, "audio"):
-            await self.audio.aclose()
-        if hasattr(self, "video"):
-            await self.video.aclose()
-        await self.room.disconnect()
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(self.room.disconnect)
+            for name in ("video", "audio", "sync", "receiver"):
+                resource = getattr(self, name, None)
+                if resource:
+                    cleanup.push_async_callback(resource.aclose)
+            for task in self.tasks:
+                task.cancel()
+            await asyncio.gather(*self.tasks, return_exceptions=True)

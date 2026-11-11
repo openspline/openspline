@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import secrets
 import time
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -298,17 +299,14 @@ class Session:
         self.closed = True
         self.timeline.changed.set()
         self.viewer_ready.set()
-        if self.task:
-            # Do not abandon an in-flight process RPC: release must not consume its response.
-            self.task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self.task
-        if self.pc:
-            await self.pc.close()
-        if self.native_sink:
-            await self.native_sink.close()
-        if self.socket_sink:
-            await self.socket_sink.close()
-
-        if self.timeline.background:
-            await asyncio.to_thread(self.timeline.background.close)
+        async with AsyncExitStack() as cleanup:
+            if self.timeline.background:
+                cleanup.push_async_callback(asyncio.to_thread, self.timeline.background.close)
+            for resource in (self.socket_sink, self.native_sink, self.pc):
+                if resource:
+                    cleanup.push_async_callback(resource.close)
+            if self.task:
+                # Do not abandon an in-flight process RPC: release must not consume its response.
+                self.task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.task

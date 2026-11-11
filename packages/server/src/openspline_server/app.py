@@ -5,10 +5,11 @@ import base64
 import contextlib
 import io
 import json
+import logging
 import secrets
 import shutil
 import time
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 
 import av
@@ -50,9 +51,13 @@ def create_app(settings: Settings | None = None):
         s = sessions.pop(id, None)
         if s:
             async with s.close_lock:
-                await s.close()
-                await pool.release(s.worker, s.id)
-                shutil.rmtree(Path(settings.runtime_dir) / "sessions" / s.id, ignore_errors=True)
+                try:
+                    await s.close()
+                finally:
+                    try:
+                        await pool.release(s.worker, s.id)
+                    finally:
+                        shutil.rmtree(Path(settings.runtime_dir) / "sessions" / s.id, ignore_errors=True)
 
     async def reaper():
         while True:
@@ -65,7 +70,10 @@ def create_app(settings: Settings | None = None):
                     or now - s.created > settings.session_ttl
                     or now - s.touched > settings.idle_timeout
                 ):
-                    await remove(id)
+                    try:
+                        await remove(id)
+                    except Exception:
+                        logging.getLogger(__name__).exception("回收数字人会话失败：%s", id)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -79,8 +87,10 @@ def create_app(settings: Settings | None = None):
         for task in quality_tasks:
             task.cancel()
         await asyncio.gather(*quality_tasks, return_exceptions=True)
-        await asyncio.gather(*(remove(id) for id in list(sessions)))
-        await pool.close()
+        async with AsyncExitStack() as cleanup:
+            cleanup.push_async_callback(pool.close)
+            for id in list(sessions):
+                cleanup.push_async_callback(remove, id)
 
     app = FastAPI(title="openspline", version="0.1.1", lifespan=lifespan)
     app.state.pool = pool
