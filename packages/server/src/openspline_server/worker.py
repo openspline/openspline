@@ -308,27 +308,40 @@ class Worker:
             if not self.ready or not self.process.is_alive():
                 self.ready = False
                 raise WorkerFailure("Worker unavailable")
-            try:
+
+            async def exchange():
                 await asyncio.to_thread(self.conn.send, (op, args))
-                receive = asyncio.create_task(
-                    asyncio.to_thread(self._receive, self.settings.inference_timeout)
-                )
-                try:
-                    kind, result = await asyncio.shield(receive)
-                except asyncio.CancelledError:
+                return await asyncio.to_thread(self._receive, self.settings.inference_timeout)
+
+            # Sending runs in a thread too: cancellation cannot stop it. Keep the
+            # lock and drain the entire RPC before another caller can use the pipe.
+            rpc = asyncio.create_task(exchange())
+            cancelled = None
+            try:
+                while True:
                     try:
-                        await receive
-                    except Exception:
+                        kind, result = await asyncio.shield(rpc)
+                        break
+                    except asyncio.CancelledError as exc:
+                        if rpc.cancelled():
+                            # Event-loop shutdown can cancel the child directly.
+                            self.ready = False
+                            raise
+                        cancelled = exc
+                if cancelled is not None:
+                    if kind != "ok":
                         self.ready = False
-                    raise
+                    raise cancelled
                 if kind != "ok":
                     raise WorkerFailure(result)
                 if op == "infer" and isinstance(result, dict):
                     self.info.update({k: v for k, v in result.items() if k.startswith("gpu_")})
                     return result["frames"], result["seconds"]
                 return result
-            except Exception:
+            except Exception as exc:
                 self.ready = False
+                if cancelled is not None:
+                    raise cancelled from exc
                 raise
 
     async def stop(self):

@@ -59,8 +59,8 @@ def create_app(settings: Settings | None = None):
                     finally:
                         shutil.rmtree(Path(settings.runtime_dir) / "sessions" / s.id, ignore_errors=True)
 
-    async def reaper():
-        while True:
+    async def reaper(stopping):
+        while not stopping.is_set():
             await asyncio.sleep(5)
             await pool.recover_idle()
             for id, s in list(sessions.items()):
@@ -72,15 +72,24 @@ def create_app(settings: Settings | None = None):
                 ):
                     try:
                         await remove(id)
-                    except Exception:
-                        logging.getLogger(__name__).exception("回收数字人会话失败：%s", id)
+                    except Exception as exc:
+                        logging.getLogger(__name__).exception("Failed to reap session %s", id)
+                        # A cleanup error can replace CancelledError in a finally
+                        # block. Shutdown must still stop this task on Python 3.10,
+                        # which has no Task.cancelling() to inspect that request.
+                        if stopping.is_set():
+                            raise asyncio.CancelledError() from exc
+                if stopping.is_set():
+                    return
 
     @asynccontextmanager
     async def lifespan(app):
         Path(settings.runtime_dir).mkdir(parents=True, exist_ok=True)
         await pool.start()
-        task = asyncio.create_task(reaper())
+        stopping = asyncio.Event()
+        task = asyncio.create_task(reaper(stopping))
         yield
+        stopping.set()
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task

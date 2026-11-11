@@ -1,3 +1,7 @@
+.vscode/
+.agents/
+.artifacts/
+skills-lock.json
 .venv/
 __pycache__/
 *.py[cod]
@@ -22,3 +26,4 @@ artifacts/
 # Local web research cache
 .firecrawl/
 experiments/
+research/
