@@ -111,7 +111,12 @@ async def test_cancelled_reset_finishes_rpc_before_releasing_worker(
         assert worker.owner is None
         monkeypatch.setattr(target, name, original)
         if outcome == "failure":
-            assert isinstance(error.value.__cause__, OSError)
+            cancelled = error.value
+            # Python 3.10 Task.result() wraps cancellation, retaining the original
+            # exception as context rather than exposing its cause directly.
+            while isinstance(cancelled.__context__, asyncio.CancelledError):
+                cancelled = cancelled.__context__
+            assert isinstance(cancelled.__cause__, OSError)
             assert not worker.ready
             with pytest.raises(CapacityError):
                 await pool.acquire("low", "before-recovery")
