@@ -1,9 +1,13 @@
 ---
-title: Stream audio on Cloud
-description: Create an avatar session on OpenSpline GPUs with a Cloud API key.
+title: Use existing audio stream
+description: Add a live avatar to an existing audio stream using the Cloud API.
 ---
 
-Create a key in the [Cloud dashboard](https://dashboard.openspline.dev/developers). Keep it on your backend.
+<Note>
+  Using OpenAI Realtime, OpenAI Agents, LiveKit, Gemini Live, or ElevenLabs Agents? Use an [agent connector](/connectors/overview) to connect your agent's audio to OpenSpline. The examples below show how to stream audio directly from an existing PCM16 iterator.
+</Note>
+
+Create a key in the [API dashboard](https://app.openspline.dev/api). Keep it on your backend.
 
 ```bash
 pip install openspline

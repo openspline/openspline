@@ -41,11 +41,13 @@ Replace `nikola-tesla1` with your avatar path. [Try a public avatar](https://das
 
 To supply your own agent audio, use the [Cloud API](/get-started/cloud-api).
 
-## Stream audio on Cloud
+## Use existing audio stream
 
 Source: `get-started/cloud-api.mdx`
 
-Create a key in the [Cloud dashboard](https://dashboard.openspline.dev/developers). Keep it on your backend.
+> **Note:** Using OpenAI Realtime, OpenAI Agents, LiveKit, Gemini Live, or ElevenLabs Agents? Use an [agent connector](/connectors/overview) to connect your agent's audio to OpenSpline. The examples below show how to stream audio directly from an existing PCM16 iterator.
+
+Create a key in the [API dashboard](https://app.openspline.dev/api). Keep it on your backend.
 
 ```bash
 pip install openspline
